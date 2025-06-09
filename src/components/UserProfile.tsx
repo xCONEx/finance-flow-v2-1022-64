@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Save, Upload } from 'lucide-react';
+import { User, Save, Upload, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ const UserProfile = () => {
   const { user, logout, userData, agencyData } = useAuth();
   const { currentTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,14 +38,15 @@ const UserProfile = () => {
     }
   }, [user, userData]);
 
+  // Verificar se é usuário premium (placeholder - ajustar conforme lógica de assinatura)
+  const isPremiumUser = true; // Aqui você pode implementar a lógica real de verificação
+
   // Buscar foto do Google se disponível
   const getProfileImageUrl = () => {
-    // Prioridade: 1. Foto customizada 2. Foto do Google 3. Avatar padrão
     if (userData?.imageuser) {
       return userData.imageuser;
     }
     
-    // Verificar se o usuário tem photoURL do Google
     if (user?.photoURL) {
       return user.photoURL;
     }
@@ -52,12 +54,16 @@ const UserProfile = () => {
     return '';
   };
 
+  // Buscar logo da empresa
+  const getCompanyLogoUrl = () => {
+    return userData?.logobase64 || '';
+  };
+
   const handleSave = async () => {
     if (!user?.id) return;
     
     setIsLoading(true);
     try {
-      // Salvar dados no Firebase
       const updateData: any = {};
       
       if (formData.phone !== (userData?.personalInfo?.phone || userData?.phone)) {
@@ -96,7 +102,6 @@ const UserProfile = () => {
     const file = event.target.files?.[0];
     if (!file || !user?.id) return;
 
-    // Verificar tamanho do arquivo (max 3MB)
     if (file.size > 3 * 1024 * 1024) {
       toast({
         title: "Erro",
@@ -106,7 +111,6 @@ const UserProfile = () => {
       return;
     }
 
-    // Verificar tipo do arquivo
     if (!file.type.startsWith('image/')) {
       toast({
         title: "Erro",
@@ -118,13 +122,11 @@ const UserProfile = () => {
 
     setIsLoading(true);
     try {
-      // Converter para base64
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = e.target?.result as string;
         
         try {
-          // Salvar no Firebase como imageuser
           await firestoreService.updateUserField(user.id, 'imageuser', base64);
           
           toast({
@@ -154,6 +156,64 @@ const UserProfile = () => {
     }
   };
 
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Erro",
+        description: "A logo deve ter no máximo 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione uma imagem válida para a logo.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        
+        try {
+          await firestoreService.updateUserField(user.id, 'logobase64', base64);
+          
+          toast({
+            title: "Logo Atualizada",
+            description: "A logo da sua empresa foi atualizada com sucesso.",
+          });
+        } catch (error) {
+          console.error('Erro ao salvar logo:', error);
+          toast({
+            title: "Erro",
+            description: "Erro ao salvar logo.",
+            variant: "destructive"
+          });
+        }
+        setIsLoading(false);
+      };
+      
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Erro ao processar logo:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao processar logo.",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -163,7 +223,6 @@ const UserProfile = () => {
 
   const handleEditToggle = () => {
     if (isEditing) {
-      // Cancelar edição - restaurar dados originais
       if (user && userData) {
         setFormData({
           name: user.name || '',
@@ -176,7 +235,6 @@ const UserProfile = () => {
     setIsEditing(!isEditing);
   };
 
-  // Determinar se o usuário está em uma empresa
   const isInCompany = user?.userType === 'company_owner' || user?.userType === 'employee';
   const companyName = agencyData?.name || 'Empresa não encontrada';
 
@@ -300,6 +358,49 @@ const UserProfile = () => {
                 </div>
               </div>
 
+              {/* Logo da Empresa - Apenas para Premium */}
+              {isPremiumUser && !isInCompany && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Logo da Empresa
+                    <span className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded-full">
+                      Premium
+                    </span>
+                  </Label>
+                  <div className="flex items-center space-x-4">
+                    {getCompanyLogoUrl() && (
+                      <div className="w-16 h-16 border rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                        <img 
+                          src={getCompanyLogoUrl()} 
+                          alt="Logo da empresa" 
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isLoading}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        {getCompanyLogoUrl() ? 'Alterar Logo' : 'Adicionar Logo'}
+                      </Button>
+                      <p className="text-xs text-gray-500">JPG, PNG até 5MB</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Tipo de Usuário</Label>
                 <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
@@ -307,6 +408,11 @@ const UserProfile = () => {
                   {user?.userType === 'company_owner' && 'Dono da Empresa'}
                   {user?.userType === 'employee' && 'Colaborador'}
                   {user?.userType === 'individual' && 'Usuário Individual'}
+                  {isPremiumUser && (
+                    <span className="ml-2 text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded-full">
+                      Premium
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
