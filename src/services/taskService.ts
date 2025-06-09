@@ -127,7 +127,7 @@ export const taskService = {
       // Migrar cada task para o Firebase
       for (const task of tasks) {
         try {
-          const taskData = {
+          const taskData: any = {
             title: task.title || 'Task sem título',
             description: task.description || '',
             priority: task.priority || 'média',
@@ -136,7 +136,7 @@ export const taskService = {
             userId: userId
           };
 
-          // Só adicionar dueDate se existir
+          // Só adicionar dueDate se existir e não for vazio
           if (task.dueDate && task.dueDate.trim()) {
             taskData.dueDate = task.dueDate;
           }
