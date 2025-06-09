@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Edit, Trash2, FileText, Calendar, DollarSign, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ const RecentJobs = () => {
 
   const handleEdit = (jobId: string) => {
     console.log('🔧 Editando job:', jobId);
-    setHistoryOpen(false); // NOVO: Fechar histórico quando editar
+    setHistoryOpen(false); // Fechar histórico quando editar
     setEditingJob(jobId);
   };
 
@@ -97,7 +98,12 @@ const RecentJobs = () => {
     }
   };
 
-  // CORRIGIDO: Função para obter valor seguro do job
+  const handleJobSaved = () => {
+    // Reabre o histórico após salvar o job
+    setHistoryOpen(true);
+  };
+
+  // Função para obter valor seguro do job
   const getSafeJobValue = (job: any) => {
     const value = job?.valueWithDiscount || job?.serviceValue || 0;
     console.log('💰 getSafeJobValue para job:', job.id, 'valor:', value);
@@ -270,7 +276,7 @@ const RecentJobs = () => {
         <JobEditor
           jobId={editingJob}
           onClose={() => setEditingJob(null)}
-          onSaved={handleJobSaved} // NOVO: Callback para otimizar navegação
+          onSaved={handleJobSaved}
         />
       )}
     </div>

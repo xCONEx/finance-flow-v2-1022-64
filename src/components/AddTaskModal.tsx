@@ -27,7 +27,7 @@ const AddTaskModal = ({ open, onOpenChange }: AddTaskModalProps) => {
     description: '',
     priority: 'média' as 'baixa' | 'média' | 'alta',
     dueDate: '',
-    status: 'todo' as string
+    status: 'todo' as 'todo' | 'editing' | 'urgent' | 'delivered' | 'revision'
   });
 
   const handleSave = async () => {
@@ -110,7 +110,7 @@ const AddTaskModal = ({ open, onOpenChange }: AddTaskModalProps) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="task-priority">Prioridade</Label>
-              <Select value={formData.priority} onValueChange={(value: any) => setFormData({...formData, priority: value})}>
+              <Select value={formData.priority} onValueChange={(value: 'baixa' | 'média' | 'alta') => setFormData({...formData, priority: value})}>
                 <SelectTrigger className="text-sm">
                   <SelectValue />
                 </SelectTrigger>
@@ -136,7 +136,7 @@ const AddTaskModal = ({ open, onOpenChange }: AddTaskModalProps) => {
 
           <div className="space-y-2">
             <Label htmlFor="task-status">Status</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({...formData, status: value})}>
+            <Select value={formData.status} onValueChange={(value: 'todo' | 'editing' | 'urgent' | 'delivered' | 'revision') => setFormData({...formData, status: value})}>
               <SelectTrigger className="text-sm">
                 <SelectValue />
               </SelectTrigger>
