@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import AddTaskModal from './AddTaskModal';
 import ExpenseModal from './ExpenseModal';
 import WorkItemModal from './WorkItemModal';
-import ManualValueModal from './ManualValueModal';
 
 interface QuickActionsProps {
   onNavigate: (tab: string) => void;
@@ -16,7 +15,6 @@ const QuickActions = ({ onNavigate }: QuickActionsProps) => {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
-  const [showManualValueModal, setShowManualValueModal] = useState(false);
 
   const quickActions = [
     {
@@ -27,10 +25,10 @@ const QuickActions = ({ onNavigate }: QuickActionsProps) => {
       color: 'bg-blue-500 hover:bg-blue-600'
     },
     {
-      title: 'Valor Manual',
-      description: 'Adicionar valor manual',
+      title: 'Calculadora',
+      description: 'Abrir calculadora de preços',
       icon: Calculator,
-      action: () => setShowManualValueModal(true),
+      action: () => onNavigate('calculator'),
       color: 'bg-purple-500 hover:bg-purple-600'
     },
     {
@@ -77,7 +75,6 @@ const QuickActions = ({ onNavigate }: QuickActionsProps) => {
       <AddTaskModal open={showTaskModal} onOpenChange={setShowTaskModal} />
       <ExpenseModal open={showExpenseModal} onOpenChange={setShowExpenseModal} />
       <WorkItemModal open={showItemModal} onOpenChange={setShowItemModal} />
-      <ManualValueModal open={showManualValueModal} onOpenChange={setShowManualValueModal} />
     </Card>
   );
 };

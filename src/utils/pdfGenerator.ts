@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Job, WorkItem, MonthlyCost } from '../types';
 
+// Declaração corrigida para autoTable
 declare module 'jspdf' {
   interface jsPDF {
     autoTable: (options: any) => jsPDF;
@@ -12,95 +13,55 @@ declare module 'jspdf' {
   }
 }
 
-// Cores do FinanceFlow
-const COLORS = {
-  primary: [99, 102, 241], // Indigo
-  secondary: [139, 69, 19], // Brown
-  accent: [16, 185, 129], // Emerald
-  text: [31, 41, 55], // Gray-800
-  lightText: [107, 114, 128], // Gray-500
-  background: [249, 250, 251], // Gray-50
-  white: [255, 255, 255]
-};
-
-const addHeader = (doc: jsPDF, title: string, userData: any) => {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 20;
-  
-  // Fundo do header
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, pageWidth, 50, 'F');
-  
-  // Logo da empresa (se premium e tiver logo)
-  const isPremium = true; // Ajustar conforme lógica de premium
-  if (isPremium && userData?.logobase64) {
-    try {
-      const logoSize = 35;
-      const logoX = pageWidth - logoSize - margin;
-      const logoY = 7.5;
-      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
-    } catch (error) {
-      console.error('Erro ao adicionar logo:', error);
-    }
-  }
-  
-  // Título
-  doc.setTextColor(...COLORS.white);
-  doc.setFontSize(24);
-  doc.setFont('helvetica', 'bold');
-  doc.text(title, margin, 30);
-  
-  // Linha decorativa
-  doc.setDrawColor(...COLORS.accent);
-  doc.setLineWidth(2);
-  doc.line(margin, 45, pageWidth - margin, 45);
-  
-  return 60; // Retorna Y position após o header
-};
-
-const addFooter = (doc: jsPDF) => {
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 20;
-  
-  // Linha decorativa
-  doc.setDrawColor(...COLORS.primary);
-  doc.setLineWidth(1);
-  doc.line(margin, pageHeight - 25, pageWidth - margin, pageHeight - 25);
-  
-  // Texto do footer
-  doc.setTextColor(...COLORS.lightText);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Relatório gerado pelo FinanceFlow', margin, pageHeight - 15);
-  doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - 60, pageHeight - 15);
-};
-
 export const generateJobPDF = async (job: Job, userData: any) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 20;
-  
-  let currentY = addHeader(doc, `Orçamento - ${job.client || 'Cliente'}`, userData);
-  
+  const margin = 14;
+  let contentStartY = 20;
+
+  // Header
+  doc.setFontSize(16);
+  doc.setTextColor(33, 37, 41);
+  doc.text(`Orçamento - ${job.client || 'Cliente'}`, margin, contentStartY);
+
+  // Logo ou nome da empresa no canto direito
+  if (userData?.imageuser) {
+    try {
+      const maxWidth = 40;
+      const maxHeight = 20;
+      const x = pageWidth - maxWidth - margin;
+      const y = contentStartY - 5;
+      doc.addImage(userData.imageuser, 'PNG', x, y, maxWidth, maxHeight);
+      contentStartY += 10;
+    } catch (error) {
+      console.error('Erro ao adicionar logo:', error);
+      // Fallback para nome da empresa
+      if (userData?.personalInfo?.company || userData?.company) {
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        const companyName = userData?.personalInfo?.company || userData?.company;
+        const companyWidth = doc.getTextWidth(companyName);
+        doc.text(companyName, pageWidth - companyWidth - margin, contentStartY);
+      }
+      contentStartY += 10;
+    }
+  } else if (userData?.personalInfo?.company || userData?.company) {
+    doc.setFontSize(12);
+    doc.setTextColor(100);
+    const companyName = userData?.personalInfo?.company || userData?.company;
+    const companyWidth = doc.getTextWidth(companyName);
+    doc.text(companyName, pageWidth - companyWidth - margin, contentStartY);
+    contentStartY += 10;
+  }
+
   // Informações do job
-  doc.setTextColor(...COLORS.text);
   doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  
-  const jobInfo = [
-    `Descrição: ${job.description || 'Não informado'}`,
-    `Data do Evento: ${new Date(job.eventDate).toLocaleDateString('pt-BR')}`,
-    `Categoria: ${job.category || 'Não informado'}`,
-    `Horas Estimadas: ${job.estimatedHours || 0}h`
-  ];
-  
-  jobInfo.forEach((info, index) => {
-    doc.text(info, margin, currentY + (index * 8));
-  });
-  
-  currentY += jobInfo.length * 8 + 20;
-  
+  doc.setTextColor(55, 65, 81);
+  doc.text(`Descrição: ${job.description || 'Não informado'}`, margin, contentStartY + 10);
+  doc.text(`Data do Evento: ${new Date(job.eventDate).toLocaleDateString('pt-BR')}`, margin, contentStartY + 18);
+  doc.text(`Categoria: ${job.category || 'Não informado'}`, margin, contentStartY + 26);
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, contentStartY + 34);
+
   // Calcular valores
   const logistics = typeof job.logistics === 'number' ? job.logistics : 0;
   const equipment = typeof job.equipment === 'number' ? job.equipment : 0;
@@ -111,125 +72,137 @@ export const generateJobPDF = async (job: Job, userData: any) => {
 
   // Tabela de valores
   const tableData = [
+    ['Horas estimadas', `${job.estimatedHours || 0}h`],
     ['Logística', logistics.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
     ['Equipamentos', equipment.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
     ['Assistência', assistance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
-    ['Custo Total', custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
-    ['Valor do Serviço', job.serviceValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]
+    ['Custo total', custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+    ['Valor do serviço', job.serviceValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]
   ];
 
+  // Adicionar desconto se existir
   if (job.discountValue && job.discountValue > 0) {
     tableData.push(['Desconto (%)', `${job.discountValue}%`]);
-    tableData.push(['Valor Final', valorComDesconto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]);
+    tableData.push(['Valor com desconto', valorComDesconto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]);
   }
 
   try {
     (doc as any).autoTable({
-      startY: currentY,
+      startY: contentStartY + 45,
       head: [['Item', 'Valor']],
       body: tableData,
       theme: 'grid',
       headStyles: {
-        fillColor: COLORS.primary,
-        textColor: COLORS.white,
+        fillColor: [99, 102, 241],
+        textColor: 255,
         fontSize: 12,
-        fontStyle: 'bold'
       },
       bodyStyles: {
         fontSize: 11,
-        textColor: COLORS.text
       },
-      alternateRowStyles: {
-        fillColor: COLORS.background
-      },
-      margin: { left: margin, right: margin }
     });
+
+    // Rodapé
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    const finalY = (doc as any).lastAutoTable?.finalY || contentStartY + 200;
+    doc.text(
+      'Este orçamento é uma estimativa com base nas informações fornecidas.',
+      margin,
+      finalY + 15
+    );
   } catch (error) {
-    console.error('Erro ao gerar tabela:', error);
+    console.error('Erro ao gerar tabela do PDF:', error);
+    // Fallback: criar tabela manual se autoTable falhar
+    let currentY = contentStartY + 45;
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    
+    tableData.forEach((row, index) => {
+      doc.text(row[0], margin, currentY + (index * 8));
+      doc.text(row[1], margin + 100, currentY + (index * 8));
+    });
   }
 
-  addFooter(doc);
   doc.save(`Orcamento_${job.client?.replace(/\s+/g, '_') || 'Cliente'}_${job.description?.replace(/\s+/g, '_') || 'Job'}.pdf`);
 };
 
 export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any) => {
   const doc = new jsPDF();
-  const margin = 20;
-  
-  let currentY = addHeader(doc, 'Relatório de Itens de Trabalho', userData);
-  
-  // Informações gerais
-  doc.setTextColor(...COLORS.text);
-  doc.setFontSize(12);
-  doc.text(`Total de itens: ${workItems.length}`, margin, currentY);
-  
-  const totalValue = workItems.reduce((sum, item) => sum + item.value, 0);
-  doc.text(`Valor total: ${totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, margin, currentY + 10);
-  
-  currentY += 30;
+  const title = 'Relatório de Itens de Trabalho';
+  const date = new Date().toLocaleDateString('pt-BR');
 
-  // Agrupar por categoria
-  const groupedItems = workItems.reduce((acc, item) => {
-    const category = item.category || 'Sem categoria';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(item);
-    return acc;
-  }, {} as Record<string, WorkItem[]>);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  let contentStartY = 20;
 
-  // Renderizar cada categoria
-  Object.entries(groupedItems).forEach(([category, items]) => {
-    // Título da categoria
-    doc.setTextColor(...COLORS.primary);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${category}`, margin, currentY);
-    currentY += 15;
-
-    // Tabela dos itens da categoria
-    const tableData = items.map(item => [
-      item.description,
-      item.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-      `${item.depreciationYears || 5} anos`
-    ]);
-
-    const categoryTotal = items.reduce((sum, item) => sum + item.value, 0);
-    tableData.push([
-      'SUBTOTAL',
-      categoryTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-      ''
-    ]);
-
+  // Logo se disponível
+  if (userData?.imageuser) {
     try {
-      (doc as any).autoTable({
-        startY: currentY,
-        head: [['Descrição', 'Valor', 'Depreciação']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: {
-          fillColor: COLORS.accent,
-          textColor: COLORS.white,
-          fontSize: 10,
-          fontStyle: 'bold'
-        },
-        bodyStyles: {
-          fontSize: 9,
-          textColor: COLORS.text
-        },
-        alternateRowStyles: {
-          fillColor: COLORS.background
-        },
-        margin: { left: margin, right: margin }
-      });
-      
-      currentY = (doc as any).lastAutoTable.finalY + 20;
-    } catch (error) {
-      console.error('Erro ao gerar tabela:', error);
-      currentY += 100;
-    }
-  });
+      const maxWidth = 40;
+      const maxHeight = 20;
+      const x = pageWidth - maxWidth - margin;
+      const y = contentStartY;
 
-  addFooter(doc);
-  doc.save(`itens_trabalho_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '_')}.pdf`);
+      doc.addImage(userData.imageuser, 'PNG', x, y, maxWidth, maxHeight);
+      contentStartY = y + maxHeight + 10;
+    } catch (error) {
+      console.error('Erro ao adicionar logo:', error);
+    }
+  }
+
+  // Título
+  doc.setFontSize(18);
+  doc.setTextColor(33, 37, 41);
+  doc.text(title, margin, contentStartY);
+
+  // Info
+  doc.setFontSize(12);
+  doc.setTextColor(55, 65, 81);
+  doc.text(`Gerado em: ${date}`, margin, contentStartY + 10);
+  doc.text(`Total de itens: ${workItems.length}`, margin, contentStartY + 18);
+
+  // Tabela
+  const tableData = workItems.map(item => [
+    item.description,
+    item.category,
+    item.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+    new Date().toLocaleDateString('pt-BR')
+  ]);
+
+  const totalValue = workItems.reduce((sum, item) => sum + item.value, 0);
+
+  try {
+    (doc as any).autoTable({
+      startY: contentStartY + 30,
+      head: [['Descrição', 'Categoria', 'Valor', 'Data']],
+      body: [
+        ...tableData,
+        ['TOTAL', '', totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), '']
+      ],
+      theme: 'grid',
+      headStyles: {
+        fillColor: [99, 102, 241],
+        textColor: 255,
+        fontSize: 12,
+      },
+      bodyStyles: {
+        fontSize: 10,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao gerar tabela:', error);
+    // Fallback manual
+    let currentY = contentStartY + 40;
+    doc.setFontSize(10);
+    tableData.forEach((row, index) => {
+      row.forEach((cell, cellIndex) => {
+        doc.text(cell, margin + (cellIndex * 45), currentY + (index * 8));
+      });
+    });
+  }
+
+  doc.save(`itens_trabalho_${date.replace(/\//g, '_')}.pdf`);
 };
 
 export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any) => {
@@ -237,82 +210,104 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
   
   try {
     const doc = new jsPDF();
-    const margin = 20;
-    
-    let currentY = addHeader(doc, 'Relatório de Despesas Mensais', userData);
-    
-    // Informações gerais
-    doc.setTextColor(...COLORS.text);
-    doc.setFontSize(12);
-    doc.text(`Total de despesas: ${expenses.length}`, margin, currentY);
-    
-    const totalValue = expenses.reduce((sum, expense) => sum + (expense.value || 0), 0);
-    doc.text(`Valor total: ${totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, margin, currentY + 10);
-    
-    currentY += 30;
+    const title = 'Relatório de Despesas Mensais';
+    const date = new Date().toLocaleDateString('pt-BR');
 
-    // Agrupar por categoria
-    const groupedExpenses = expenses.reduce((acc, expense) => {
-      const category = expense.category || 'Sem categoria';
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(expense);
-      return acc;
-    }, {} as Record<string, MonthlyCost[]>);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    let contentStartY = 20;
 
-    // Renderizar cada categoria
-    Object.entries(groupedExpenses).forEach(([category, items]) => {
-      // Título da categoria
-      doc.setTextColor(...COLORS.primary);
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${category}`, margin, currentY);
-      currentY += 15;
-
-      // Tabela dos itens da categoria
-      const tableData = items.map(expense => [
-        expense.description || 'Sem descrição',
-        expense.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-        new Date(expense.month + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-      ]);
-
-      const categoryTotal = items.reduce((sum, expense) => sum + (expense.value || 0), 0);
-      tableData.push([
-        'SUBTOTAL',
-        categoryTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-        ''
-      ]);
-
+    // Logo se disponível
+    if (userData?.imageuser) {
       try {
-        (doc as any).autoTable({
-          startY: currentY,
-          head: [['Descrição', 'Valor', 'Mês']],
-          body: tableData,
-          theme: 'grid',
-          headStyles: {
-            fillColor: COLORS.accent,
-            textColor: COLORS.white,
-            fontSize: 10,
-            fontStyle: 'bold'
-          },
-          bodyStyles: {
-            fontSize: 9,
-            textColor: COLORS.text
-          },
-          alternateRowStyles: {
-            fillColor: COLORS.background
-          },
-          margin: { left: margin, right: margin }
-        });
-        
-        currentY = (doc as any).lastAutoTable.finalY + 20;
-      } catch (error) {
-        console.error('Erro ao gerar tabela da categoria:', error);
-        currentY += 100;
-      }
-    });
+        const maxWidth = 40;
+        const maxHeight = 20;
+        const x = pageWidth - maxWidth - margin;
+        const y = contentStartY;
 
-    addFooter(doc);
-    doc.save(`despesas_mensais_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '_')}.pdf`);
+        doc.addImage(userData.imageuser, 'PNG', x, y, maxWidth, maxHeight);
+        contentStartY = y + maxHeight + 10;
+      } catch (error) {
+        console.error('Erro ao adicionar logo:', error);
+      }
+    }
+
+    // Título
+    doc.setFontSize(18);
+    doc.setTextColor(33, 37, 41);
+    doc.text(title, margin, contentStartY);
+
+    // Info
+    doc.setFontSize(12);
+    doc.setTextColor(55, 65, 81);
+    doc.text(`Gerado em: ${date}`, margin, contentStartY + 10);
+    doc.text(`Total de despesas: ${expenses.length}`, margin, contentStartY + 18);
+
+    // Preparar dados da tabela
+    const tableData = expenses.map(expense => [
+      expense.description || 'Sem descrição',
+      expense.category || 'Sem categoria',
+      expense.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      new Date(expense.month + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    ]);
+
+    const totalValue = expenses.reduce((sum, expense) => sum + (expense.value || 0), 0);
+
+    // Adicionar linha de total
+    tableData.push([
+      'TOTAL',
+      '',
+      totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      ''
+    ]);
+
+    // Tentar usar autoTable, com fallback manual
+    try {
+      console.log('📊 Tentando gerar tabela com autoTable...');
+      (doc as any).autoTable({
+        startY: contentStartY + 30,
+        head: [['Descrição', 'Categoria', 'Valor', 'Mês']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [99, 102, 241],
+          textColor: 255,
+          fontSize: 12,
+        },
+        bodyStyles: {
+          fontSize: 10,
+        },
+      });
+      console.log('✅ Tabela criada com autoTable');
+    } catch (autoTableError) {
+      console.error('❌ Erro com autoTable, usando fallback manual:', autoTableError);
+      
+      // Fallback: criar tabela manual
+      let currentY = contentStartY + 40;
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      
+      // Cabeçalho
+      doc.setFont(undefined, 'bold');
+      doc.text('Descrição', margin, currentY);
+      doc.text('Categoria', margin + 60, currentY);
+      doc.text('Valor', margin + 120, currentY);
+      doc.text('Mês', margin + 170, currentY);
+      
+      currentY += 10;
+      doc.setFont(undefined, 'normal');
+      
+      // Dados
+      tableData.forEach((row, index) => {
+        doc.text(row[0].substring(0, 25), margin, currentY + (index * 8));
+        doc.text(row[1].substring(0, 15), margin + 60, currentY + (index * 8));
+        doc.text(row[2], margin + 120, currentY + (index * 8));
+        doc.text(row[3].substring(0, 15), margin + 170, currentY + (index * 8));
+      });
+    }
+
+    console.log('💾 Salvando PDF...');
+    doc.save(`despesas_mensais_${date.replace(/\//g, '_')}.pdf`);
     console.log('✅ PDF de despesas gerado com sucesso!');
     
   } catch (error) {
