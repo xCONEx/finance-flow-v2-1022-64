@@ -41,14 +41,21 @@ const AddTaskModal = ({ open, onOpenChange }: AddTaskModalProps) => {
     }
 
     try {
-      await addTask({
+      // Criar objeto da task, removendo campos undefined/vazios
+      const taskData: any = {
         title: formData.title,
-        description: formData.description,
+        description: formData.description || '',
         priority: formData.priority,
-        dueDate: formData.dueDate || undefined,
         completed: false,
         status: formData.status
-      });
+      };
+
+      // Só adicionar dueDate se não for vazio
+      if (formData.dueDate && formData.dueDate.trim()) {
+        taskData.dueDate = formData.dueDate;
+      }
+
+      await addTask(taskData);
 
       toast({
         title: "Tarefa Adicionada",

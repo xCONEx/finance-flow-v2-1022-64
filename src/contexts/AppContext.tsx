@@ -124,13 +124,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setWorkRoutine(null);
       }
 
-      // NOVO: Carregar tasks do Firebase
+      // NOVO: Carregar tasks do Firebase e migrar localStorage se necessário
       try {
+        // Primeiro, tentar migrar tasks do localStorage
+        await taskService.migrateLocalStorageTasks(user!.id);
+        
+        // Depois carregar todas as tasks do Firebase
         const userTasks = await taskService.getUserTasks(user!.id);
         console.log('📝 Tasks carregadas do Firebase:', userTasks.length);
         setTasks(userTasks);
       } catch (error) {
-        console.error('❌ Erro ao carregar tasks do Firebase:', error);
+        console.error('❌ Erro ao carregar/migrar tasks:', error);
         setTasks([]);
       }
     }
@@ -454,20 +458,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // CORRIGIDO: Tasks agora salvam no Firebase
+  // CORRIGIDO: Tasks agora salvam no Firebase com validação
   const addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'userId'>) => {
     if (!user) {
       console.error('❌ Usuário não encontrado para salvar task');
       throw new Error('Usuário não encontrado');
     }
 
-    const newTask: Task = {
-      ...task,
-      id: `temp_${Date.now()}`, // ID temporário
-      createdAt: new Date().toISOString(),
-      userId: user.id
-    };
-    
     try {
       // Salvar no Firebase primeiro
       const firebaseId = await taskService.addTask({
@@ -475,10 +472,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userId: user.id
       });
       
-      // Atualizar com o ID real do Firebase
-      const finalTask = { ...newTask, id: firebaseId };
-      setTasks(prev => [...prev, finalTask]);
+      // Criar task para o estado local
+      const newTask: Task = {
+        ...task,
+        id: firebaseId,
+        createdAt: new Date().toISOString(),
+        userId: user.id
+      };
       
+      setTasks(prev => [...prev, newTask]);
       console.log('✅ Task adicionada e salva no Firebase');
     } catch (error) {
       console.error('❌ Erro ao salvar task no Firebase:', error);
