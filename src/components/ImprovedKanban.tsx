@@ -738,5 +738,3 @@ const ImprovedKanban = () => {
 };
 
 export default ImprovedKanban;
-
-}
