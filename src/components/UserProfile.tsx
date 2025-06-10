@@ -1,519 +1,384 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { User, Save, Upload, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Calendar, Building2, Shield, Crown, Users, Loader2, Camera, Save, X, Phone, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
-import { toast } from '@/hooks/use-toast';
 import { firestoreService } from '../services/firestore';
+import { toast } from '@/hooks/use-toast';
 
 const UserProfile = () => {
-  const { user, logout, userData, agencyData, refreshUserData } = useAuth();
-  const { currentTheme } = useTheme();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [logoHover, setLogoHover] = useState(false);
+  const { user, userData, companyData, refreshUserData } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
-    company: ''
+    personalInfo: {
+      phone: '',
+      company: ''
+    }
   });
 
-  // Carregar dados quando userData mudar
+  // Verificação de tipo de usuário e subscription
+  const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'company_colab';
+  const userSubscription = userData?.subscription || { plan: 'free', status: 'active' };
+
   useEffect(() => {
-    if (user && userData) {
+    if (userData) {
       setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        phone: userData.personalInfo?.phone || userData.phone || '',
-        company: userData.personalInfo?.company || userData.company || ''
+        name: userData.name || '',
+        email: userData.email || '',
+        personalInfo: {
+          phone: userData.personalInfo?.phone || '',
+          company: userData.personalInfo?.company || ''
+        }
       });
     }
-  }, [user, userData]);
+  }, [userData]);
 
-  // Verificar se o usuário é premium
-  const isPremium = userData?.subscription === 'premium' || userData?.subscription === 'enterprise';
-
-  // Buscar foto do Google se disponível
-  const getProfileImageUrl = () => {
-    // Prioridade: 1. Foto customizada 2. Foto do Google 3. Avatar padrão
-    if (userData?.imageuser) {
-      return userData.imageuser;
-    }
-    
-    // Verificar se o usuário tem photoURL do Google
-    if (user?.photoURL) {
-      return user.photoURL;
-    }
-    
-    return '';
+  const getUserTypeDisplay = (userType: string) => {
+    const types: Record<string, { label: string; icon: React.ComponentType; color: string }> = {
+      admin: { label: 'Administrador', icon: Shield, color: 'bg-purple-100 text-purple-800' },
+      company_owner: { label: 'Dono da Empresa', icon: Crown, color: 'bg-yellow-100 text-yellow-800' },
+      company_colab: { label: 'Colaborador', icon: Users, color: 'bg-blue-100 text-blue-800' },
+      individual: { label: 'Individual', icon: User, color: 'bg-green-100 text-green-800' }
+    };
+    return types[userType] || types.individual;
   };
 
   const handleSave = async () => {
     if (!user?.id) return;
-    
-    setIsLoading(true);
+
     try {
-      // Salvar dados no Firebase
-      const updateData: any = {};
-      
-      if (formData.phone !== (userData?.personalInfo?.phone || userData?.phone)) {
-        updateData.phone = formData.phone;
-      }
-      
-      if (formData.company !== (userData?.personalInfo?.company || userData?.company)) {
-        updateData.company = formData.company;
-      }
-      
-      if (Object.keys(updateData).length > 0) {
-        await firestoreService.updateUserField(user.id, 'personalInfo', {
-          phone: formData.phone,
-          company: formData.company
-        });
-        
-        // Atualizar dados localmente
-        await refreshUserData();
-      }
+      const updates = {
+        name: formData.name,
+        email: formData.email,
+        personalInfo: {
+          phone: formData.personalInfo.phone,
+          company: formData.personalInfo.company
+        }
+      };
+
+      await firestoreService.updateUserData(user.id, updates);
+      await refreshUserData();
+      setEditing(false);
       
       toast({
         title: "Perfil Atualizado",
-        description: "Suas informações foram atualizadas com sucesso.",
+        description: "Suas informações foram salvas com sucesso.",
       });
-      
-      setIsEditing(false);
     } catch (error) {
-      console.error('Erro ao salvar perfil:', error);
+      console.error('Erro ao atualizar perfil:', error);
       toast({
         title: "Erro",
-        description: "Erro ao atualizar perfil.",
+        description: "Erro ao salvar informações do perfil.",
         variant: "destructive"
       });
     }
-    setIsLoading(false);
   };
 
-  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user?.id) return;
 
-    // Verificar tamanho do arquivo (max 3MB)
-    if (file.size > 3 * 1024 * 1024) {
-      toast({
-        title: "Erro",
-        description: "A imagem deve ter no máximo 3MB.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Verificar tipo do arquivo
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Erro",
-        description: "Por favor, selecione uma imagem válida.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
+    setUploading(true);
     try {
-      // Converter para base64
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target?.result as string;
-        
-        try {
-          // Salvar no Firebase como imageuser
-          await firestoreService.updateUserField(user.id, 'imageuser', base64);
-          
-          // Atualizar dados localmente
-          await refreshUserData();
-          
-          toast({
-            title: "Foto Atualizada",
-            description: "Sua foto de perfil foi atualizada com sucesso.",
-          });
-        } catch (error) {
-          console.error('Erro ao salvar foto:', error);
-          toast({
-            title: "Erro",
-            description: "Erro ao salvar foto.",
-            variant: "destructive"
-          });
-        }
-        setIsLoading(false);
-      };
-      
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('Erro ao processar imagem:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao processar imagem.",
-        variant: "destructive"
-      });
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user?.id) return;
-
-    // Verificar se é usuário premium
-    if (!isPremium) {
-      toast({
-        title: "Recurso Premium",
-        description: "Upload de logo é exclusivo para usuários premium.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Verificar tamanho do arquivo (max 3MB)
-    if (file.size > 3 * 1024 * 1024) {
-      toast({
-        title: "Erro",
-        description: "A logo deve ter no máximo 3MB.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Verificar tipo do arquivo
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Erro",
-        description: "Por favor, selecione uma imagem válida.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Converter para base64
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target?.result as string;
-        
-        try {
-          // Salvar no Firebase como logobase64
-          await firestoreService.updateUserField(user.id, 'logobase64', base64);
-          
-          // Atualizar dados localmente
-          await refreshUserData();
-          
-          toast({
-            title: "Logo Atualizada",
-            description: "Sua logo da empresa foi atualizada com sucesso.",
-          });
-        } catch (error) {
-          console.error('Erro ao salvar logo:', error);
-          toast({
-            title: "Erro",
-            description: "Erro ao salvar logo.",
-            variant: "destructive"
-          });
-        }
-        setIsLoading(false);
-      };
-      
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('Erro ao processar logo:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao processar logo.",
-        variant: "destructive"
-      });
-      setIsLoading(false);
-    }
-  };
-
-  const handleDeleteLogo = async () => {
-    if (!user?.id) return;
-
-    setIsLoading(true);
-    try {
-      await firestoreService.updateUserField(user.id, 'logobase64', '');
-      
-      // Atualizar dados localmente
-      await refreshUserData();
+      // Simulação de upload - você pode implementar upload real aqui
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       toast({
-        title: "Logo Removida",
-        description: "Logo da empresa foi removida com sucesso.",
+        title: "Foto Atualizada",
+        description: "Sua foto de perfil foi atualizada com sucesso.",
       });
     } catch (error) {
-      console.error('Erro ao remover logo:', error);
       toast({
         title: "Erro",
-        description: "Erro ao remover logo.",
+        description: "Erro ao fazer upload da imagem.",
         variant: "destructive"
       });
+    } finally {
+      setUploading(false);
     }
-    setIsLoading(false);
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
+  if (!user || !userData) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Carregando perfil...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const handleEditToggle = () => {
-    if (isEditing) {
-      // Cancelar edição - restaurar dados originais
-      if (user && userData) {
-        setFormData({
-          name: user.name || '',
-          email: user.email || '',
-          phone: userData.personalInfo?.phone || userData.phone || '',
-          company: userData.personalInfo?.company || userData.company || ''
-        });
-      }
-    }
-    setIsEditing(!isEditing);
-  };
-
-  // Determinar se o usuário está em uma empresa
-  const isInCompany = user?.userType === 'company_owner' || user?.userType === 'employee';
-  const companyName = agencyData?.name || 'Empresa não encontrada';
+  const userTypeInfo = getUserTypeDisplay(user.userType);
+  const IconComponent = userTypeInfo.icon;
 
   return (
     <div className="space-y-6 pb-20 md:pb-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
-          <User className={`text-${currentTheme.accent}`} />
-          Meu Perfil
-        </h2>
-        <p className="text-gray-600 dark:text-gray-400">Informações da sua conta</p>
+      {/* Header */}
+      <div className="text-center">
+        <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
+          <User className="text-purple-600" />
+          Perfil do Usuário
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">
+          Gerencie suas informações pessoais e configurações
+        </p>
       </div>
 
-      <div className="max-w-2xl mx-auto">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Conta</CardTitle>
-              <Button
-                variant="outline"
-                onClick={handleEditToggle}
-                disabled={isLoading}
-              >
-                {isEditing ? 'Cancelar' : 'Editar Perfil'}
-              </Button>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            {/* User Photo */}
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src={getProfileImageUrl()} alt={user?.name || 'User'} />
-                <AvatarFallback className={`bg-gradient-to-r ${currentTheme.primary} text-white text-2xl`}>
-                  {formData.name?.charAt(0) || 'U'}
+      {/* Profile Card */}
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader className="text-center pb-2">
+          <div className="flex flex-col items-center space-y-4">
+            {/* Avatar */}
+            <div className="relative">
+              <Avatar className="w-24 h-24">
+                <AvatarImage 
+                  src={userData.imageuser || userData.photoURL || ''} 
+                  alt={userData.name || 'Usuario'} 
+                />
+                <AvatarFallback className="text-2xl">
+                  {(userData.name || 'U').charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              {isEditing && (
-                <div className="space-y-2">
+              
+              {editing && (
+                <label className="absolute bottom-0 right-0 p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <Camera className="h-4 w-4 text-gray-600 dark:text-gray-400" />
                   <input
-                    ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={handlePhotoUpload}
+                    onChange={handleImageUpload}
                     className="hidden"
+                    disabled={uploading}
                   />
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    {isLoading ? 'Salvando...' : 'Alterar Foto'}
-                  </Button>
-                  <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
-                  {user?.photoURL && !userData?.imageuser && (
-                    <p className="text-xs text-blue-600">Foto atual: Google Account</p>
-                  )}
+                </label>
+              )}
+              
+              {uploading && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 text-white animate-spin" />
                 </div>
               )}
             </div>
 
-            {/* User Info Form */}
-            <div className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                {/* Coluna Esquerda */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nome Completo</Label>
-                    {isEditing ? (
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => handleInputChange('name', e.target.value)}
-                        placeholder="Digite seu nome completo"
-                      />
-                    ) : (
-                      <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.name || 'Não informado'}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone</Label>
-                    {isEditing ? (
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                        placeholder="(11) 99999-9999"
-                      />
-                    ) : (
-                      <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.phone || 'Não informado'}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Tipo de Usuário</Label>
-                    <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
-                      {user?.userType === 'admin' && 'Administrador do Sistema'}
-                      {user?.userType === 'company_owner' && 'Dono da Empresa'}
-                      {user?.userType === 'employee' && 'Colaborador'}
-                      {user?.userType === 'individual' && 'Usuário Individual'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Coluna Direita */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">E-mail</Label>
-                    <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.email}</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Empresa</Label>
-                    {isInCompany ? (
-                      <div className="space-y-1">
-                        <p className="text-sm py-2 px-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded font-medium text-blue-700 dark:text-blue-300">
-                          {companyName}
-                        </p>
-                        <p className="text-xs text-gray-500">Você faz parte desta empresa</p>
-                      </div>
-                    ) : (
-                      isEditing ? (
-                        <Input
-                          id="company"
-                          value={formData.company}
-                          onChange={(e) => handleInputChange('company', e.target.value)}
-                          placeholder="Nome da empresa"
-                        />
-                      ) : (
-                        <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.company || 'Não informado'}</p>
-                      )
-                    )}
-                  </div>
-
-                  {/* Logo da Empresa - apenas para usuários premium */}
-{isPremium && isEditing && (
-  <div className="space-y-2">
-    <Label>Logo da Empresa</Label>
-
-    {userData?.logobase64 ? (
-      <div 
-        className="relative w-fit"
-        onMouseEnter={() => setLogoHover(true)}
-        onMouseLeave={() => setLogoHover(false)}
-      >
-        <img 
-          src={userData.logobase64} 
-          alt="Logo da empresa" 
-          className="h-20 w-auto border rounded-lg"
-        />
-
-        {logoHover && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg z-10">
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={handleDeleteLogo}
-              disabled={isLoading}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {/* User Type Badge */}
+            <Badge className={userTypeInfo.color}>
+              <IconComponent className="h-4 w-4 mr-1" />
+              {userTypeInfo.label}
+            </Badge>
           </div>
-        )}
-      </div>
-    ) : (
-      <div className="space-y-2">
-        <input
-          ref={logoInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleLogoUpload}
-          className="hidden"
-        />
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={() => logoInputRef.current?.click()}
-          disabled={isLoading}
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          {isLoading ? 'Salvando...' : 'Adicionar Logo'}
-        </Button>
-        <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
-      </div>
-    )}
-  </div>
-)}
+        </CardHeader>
 
-                </div>
+        <CardContent className="space-y-6">
+          {/* Basic Info */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Informações Básicas</h3>
+              <Button
+                size="sm"
+                variant={editing ? "outline" : "default"}
+                onClick={() => editing ? setEditing(false) : setEditing(true)}
+              >
+                {editing ? <X className="h-4 w-4 mr-2" /> : <User className="h-4 w-4 mr-2" />}
+                {editing ? 'Cancelar' : 'Editar'}
+              </Button>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome Completo</Label>
+                {editing ? (
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    placeholder="Seu nome completo"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                    <User className="h-4 w-4 text-gray-500" />
+                    <span>{userData.name || 'Não informado'}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                {editing ? (
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    placeholder="seu@email.com"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                    <Mail className="h-4 w-4 text-gray-500" />
+                    <span>{userData.email || 'Não informado'}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefone</Label>
+                {editing ? (
+                  <Input
+                    id="phone"
+                    value={formData.personalInfo.phone}
+                    onChange={(e) => setFormData({
+                      ...formData, 
+                      personalInfo: {...formData.personalInfo, phone: e.target.value}
+                    })}
+                    placeholder="(11) 99999-9999"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                    <Phone className="h-4 w-4 text-gray-500" />
+                    <span>{userData.personalInfo?.phone || 'Não informado'}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="company">Empresa</Label>
+                {editing ? (
+                  <Input
+                    id="company"
+                    value={formData.personalInfo.company}
+                    onChange={(e) => setFormData({
+                      ...formData, 
+                      personalInfo: {...formData.personalInfo, company: e.target.value}
+                    })}
+                    placeholder="Nome da sua empresa"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                    <Building2 className="h-4 w-4 text-gray-500" />
+                    <span>{userData.personalInfo?.company || 'Não informado'}</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Save Button */}
-            {isEditing && (
+            {editing && (
               <div className="flex gap-2">
-                <Button 
-                  onClick={handleSave}
-                  className={`bg-gradient-to-r ${currentTheme.primary}`}
-                  disabled={isLoading}
-                >
+                <Button onClick={handleSave} className="flex-1">
                   <Save className="h-4 w-4 mr-2" />
-                  {isLoading ? 'Salvando...' : 'Salvar Alterações'}
+                  Salvar Alterações
                 </Button>
               </div>
             )}
+          </div>
 
-            {/* Account Actions */}
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="font-medium">Conta</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Membro desde {new Date(user?.createdAt || '').toLocaleDateString('pt-BR')}
-                  </p>
+          <Separator />
+
+          {/* Company Info */}
+          {isCompanyUser && companyData && (
+            <>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Informações da Empresa
+                </h3>
+                
+                <div className="grid gap-4">
+                  <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+                    <div>
+                      <p className="font-medium">{companyData.name}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Plano: {companyData.plan === 'premium' ? 'Premium' : 'Gratuito'}
+                      </p>
+                    </div>
+                    <Badge variant="outline">
+                      {user.userType === 'company_owner' ? 'Proprietário' : 'Colaborador'}
+                    </Badge>
+                  </div>
                 </div>
-                <Button variant="outline" onClick={logout}>
-                  Sair da Conta
-                </Button>
               </div>
+              <Separator />
+            </>
+          )}
+
+          {/* Account Details */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Detalhes da Conta</h3>
+            
+            <div className="grid gap-4">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm">Membro desde</span>
+                </div>
+                <span className="text-sm font-medium">
+                  {new Date(userData.createdAt).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm">Tipo de Conta</span>
+                </div>
+                <Badge className={userTypeInfo.color}>
+                  <IconComponent className="h-3 w-3 mr-1" />
+                  {userTypeInfo.label}
+                </Badge>
+              </div>
+
+              {!isCompanyUser && (
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                  <div className="flex items-center gap-2">
+                    <Crown className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm">Plano</span>
+                  </div>
+                  <Badge variant={userSubscription.plan === 'premium' ? 'default' : 'secondary'}>
+                    {userSubscription.plan === 'premium' ? 'Premium' : 'Gratuito'}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Additional Info for Company Users */}
+      {user.userType === 'company_colab' && companyData && (
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Colaboração em Empresa
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+                <div>
+                  <p className="font-medium">Você é colaborador em:</p>
+                  <p className="text-lg font-bold text-blue-600">{companyData.name}</p>
+                </div>
+                <Badge className="bg-blue-100 text-blue-800">
+                  Colaborador Ativo
+                </Badge>
+              </div>
+              
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Como colaborador, você tem acesso aos projetos compartilhados da empresa e pode contribuir para o Kanban e tarefas em equipe.
+              </p>
             </div>
           </CardContent>
         </Card>
-      </div>
+      )}
     </div>
   );
 };

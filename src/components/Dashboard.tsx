@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,26 +5,25 @@ import { DollarSign, Calculator, TrendingUp, Users, CheckCircle, Clock, Plus, Tr
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePrivacy } from '../contexts/PrivacyContext';
-import { useAppContext } from '../contexts/AppContext';
+import { useApp } from '../contexts/AppContext';
 import CostDistributionChart from './CostDistributionChart';
 import RecentJobs from './RecentJobs';
 import TaskList from './TaskList';
 import AddTaskModal from './AddTaskModal';
 import InviteAcceptance from './InviteAcceptance';
 import ManualValueModal from '@/components/ManualValueModal';
-import ExpenseModal from '@/components/ExpenseModal'; // ajuste o caminho se necessário
-
+import ExpenseModal from '@/components/ExpenseModal';
 
 const Dashboard = () => {
-  const { user, userData, agencyData } = useAuth();
+  const { user, userData, companyData } = useAuth();
   const { currentTheme } = useTheme();
   const { formatValue } = usePrivacy();
-  const { jobs, monthlyCosts, workItems, workRoutine, tasks, addMonthlyCost } = useAppContext();
+  const { jobs, monthlyCosts, workItems, workRoutine, tasks, addMonthlyCost } = useApp();
   const [showTaskModal, setShowTaskModal] = useState(false);
 
   // CORRIGIDO: Dashboard sempre usa dados pessoais do usuário
   // Apenas Kanban e Equipe são compartilhados com a empresa
-  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
+  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'company_colab') && !!companyData;
   
   // Dashboard sempre mostra dados pessoais
   const currentData = userData;
@@ -138,7 +136,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
             <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
               <Building2 className="h-5 w-5" />
               <p className="text-sm">
-                <strong>Empresa:</strong> {agencyData.name} | 
+                <strong>Empresa:</strong> {companyData.name} | 
                 <span className="ml-2">Este dashboard mostra seus dados pessoais.</span>
               </p>
             </div>
@@ -228,7 +226,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
   <CardContent className="space-y-3">
     <Button
       className={`w-full bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 transition-all duration-300 hover:scale-105`}
-      onClick={() => setShowManualModal(true)} // ✅ Abre ManualValueModal
+      onClick={() => setShowManualModal(true)}
     >
       <Calculator className="mr-2 h-4 w-4" />
       Adicionar Valor Manual
@@ -237,7 +235,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
     <Button
       variant="outline"
       className="w-full transition-all duration-300 hover:scale-105"
-      onClick={() => setShowExpenseModal(true)} // ✅ Abre ExpenseModal
+      onClick={() => setShowExpenseModal(true)}
     >
       <DollarSign className="mr-2 h-4 w-4" />
       Adicionar Custo

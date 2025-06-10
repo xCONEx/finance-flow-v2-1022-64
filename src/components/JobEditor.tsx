@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { PercentageInput } from '@/components/ui/percentage-input';
-import { useAppContext } from '../contexts/AppContext';
+import { useApp } from '../contexts/AppContext';
 import { Job } from '../types';
 import { toast } from '@/hooks/use-toast';
 
@@ -19,7 +19,7 @@ interface JobEditorProps {
 }
 
 const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
-  const { jobs, addJob, updateJob } = useAppContext();
+  const { jobs, addJob, updateJob } = useApp();
   const [formData, setFormData] = useState({
     description: '',
     client: '',
