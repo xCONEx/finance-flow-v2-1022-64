@@ -1,4 +1,3 @@
-
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Job, WorkItem, MonthlyCost } from '../types';
@@ -35,20 +34,52 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   doc.setFillColor(...COLORS.primary);
   doc.rect(0, 0, pageWidth, 35, 'F');
   
-  // Título principal com descrição
+  // Título principal com descrição - tamanho reduzido
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(20);
+  doc.setFontSize(16);
   doc.setFont(undefined, 'bold');
   const headerText = `ORÇAMENTO - ${job.description || 'Serviço'}`;
   doc.text(headerText, margin, 22);
 
-  // Logo premium no header se disponível
+  // Logo premium no header se disponível - tamanho responsivo
   if (userData?.logobase64) {
     try {
-      const logoSize = 25;
-      const logoX = pageWidth - logoSize - margin;
-      const logoY = 5;
-      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
+      // Criar uma imagem temporária para obter dimensões
+      const img = new Image();
+      img.onload = function() {
+        const imgWidth = this.width;
+        const imgHeight = this.height;
+        const aspectRatio = imgWidth / imgHeight;
+        
+        // Definir tamanho máximo e calcular dimensões proporcionais
+        const maxSize = 25;
+        let logoWidth, logoHeight;
+        
+        if (aspectRatio > 1) {
+          // Imagem mais larga
+          logoWidth = Math.min(maxSize, imgWidth / 4);
+          logoHeight = logoWidth / aspectRatio;
+        } else {
+          // Imagem mais alta ou quadrada
+          logoHeight = Math.min(maxSize, imgHeight / 4);
+          logoWidth = logoHeight * aspectRatio;
+        }
+        
+        const logoX = pageWidth - logoWidth - margin;
+        const logoY = (35 - logoHeight) / 2; // Centralizar verticalmente no header
+        
+        doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoWidth, logoHeight);
+      };
+      
+      // Fallback para caso a imagem não carregue
+      img.onerror = function() {
+        const logoSize = 25;
+        const logoX = pageWidth - logoSize - margin;
+        const logoY = 5;
+        doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
+      };
+      
+      img.src = userData.logobase64;
     } catch (error) {
       console.log('Erro ao adicionar logo:', error);
     }

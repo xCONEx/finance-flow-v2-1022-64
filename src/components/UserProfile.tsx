@@ -12,7 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import { firestoreService } from '../services/firestore';
 
 const UserProfile = () => {
-  const { user, logout, userData, agencyData } = useAuth();
+  const { user, logout, userData, agencyData, refreshUserData } = useAuth();
   const { currentTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +78,9 @@ const UserProfile = () => {
           phone: formData.phone,
           company: formData.company
         });
+        
+        // Atualizar dados localmente
+        await refreshUserData();
       }
       
       toast({
@@ -131,6 +134,9 @@ const UserProfile = () => {
         try {
           // Salvar no Firebase como imageuser
           await firestoreService.updateUserField(user.id, 'imageuser', base64);
+          
+          // Atualizar dados localmente
+          await refreshUserData();
           
           toast({
             title: "Foto Atualizada",
@@ -204,6 +210,9 @@ const UserProfile = () => {
           // Salvar no Firebase como logobase64
           await firestoreService.updateUserField(user.id, 'logobase64', base64);
           
+          // Atualizar dados localmente
+          await refreshUserData();
+          
           toast({
             title: "Logo Atualizada",
             description: "Sua logo da empresa foi atualizada com sucesso.",
@@ -237,6 +246,10 @@ const UserProfile = () => {
     setIsLoading(true);
     try {
       await firestoreService.updateUserField(user.id, 'logobase64', '');
+      
+      // Atualizar dados localmente
+      await refreshUserData();
+      
       toast({
         title: "Logo Removida",
         description: "Logo da empresa foi removida com sucesso.",
@@ -415,7 +428,7 @@ const UserProfile = () => {
                   {/* Logo da Empresa - apenas para usuários premium */}
                   {isPremium && isEditing && (
                     <div className="space-y-2">
-                      <Label>Logo da Empresa</Label>
+                      <Label>Logo</Label>
                       {userData?.logobase64 ? (
                         <div 
                           className="relative inline-block"
