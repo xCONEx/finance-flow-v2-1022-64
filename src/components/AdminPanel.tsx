@@ -24,7 +24,8 @@ import {
   CheckCircle,
   Clock,
   Activity,
-  Eye
+  Eye,
+  UserMinus
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { firestoreService } from '../services/firestore';
@@ -174,7 +175,7 @@ const AdminPanel = () => {
       const companyData = {
         name: newCompanyName,
         ownerUID: owner.id,
-        colaboradores: [{ uid: owner.id, email: owner.email, role: 'owner' }],
+        collaborators: [],
         equipments: [],
         expenses: [],
         jobs: [],
@@ -204,11 +205,9 @@ const AdminPanel = () => {
     }
   };
 
-  // CORRIGIDO: Função para editar empresa agora usa o método correto
   const handleEditCompany = async (companyId, newData) => {
     try {
       console.log('Editando empresa:', companyId, newData);
-      // Usar o método correto para atualizar empresa, não usuário
       await firestoreService.updateCompanyField(companyId, 'name', newData.name);
       
       setCompanies(companies.map(company => 
@@ -226,6 +225,61 @@ const AdminPanel = () => {
       toast({
         title: "Erro",
         description: "Erro ao editar empresa",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteCompany = async (companyId, companyName) => {
+    if (!confirm(`Tem certeza que deseja excluir a empresa "${companyName}"? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      console.log('Excluindo empresa:', companyId);
+      await firestoreService.deleteCompany(companyId);
+      
+      setCompanies(companies.filter(company => company.id !== companyId));
+      
+      toast({
+        title: "Sucesso",
+        description: "Empresa excluída com sucesso"
+      });
+    } catch (error) {
+      console.error('Erro ao excluir empresa:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir empresa",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRemoveCollaborator = async (companyId, collaboratorUID) => {
+    try {
+      console.log('Removendo colaborador:', companyId, collaboratorUID);
+      await firestoreService.removeCompanyMember(companyId, collaboratorUID);
+      
+      // Atualizar o estado local
+      setCompanies(companies.map(company => {
+        if (company.id === companyId) {
+          return {
+            ...company,
+            collaborators: company.collaborators.filter(uid => uid !== collaboratorUID)
+          };
+        }
+        return company;
+      }));
+      
+      toast({
+        title: "Sucesso",
+        description: "Colaborador removido com sucesso"
+      });
+    } catch (error) {
+      console.error('Erro ao remover colaborador:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao remover colaborador",
         variant: "destructive"
       });
     }
@@ -280,6 +334,11 @@ const AdminPanel = () => {
     }));
   };
 
+  const getCollaboratorName = (uid) => {
+    const user = users.find(u => u.uid === uid || u.id === uid);
+    return user?.email || `UID: ${uid}`;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -306,7 +365,7 @@ const AdminPanel = () => {
         <p className="text-gray-600">Gestão completa da plataforma FinanceFlow</p>
       </div>
 
-      {/* Estatísticas Gerais - ADICIONADAS métricas por plano */}
+      {/* Estatísticas Gerais */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -341,7 +400,7 @@ const AdminPanel = () => {
         </Card>
       </div>
 
-      {/* NOVA seção: Métricas por Plano */}
+      {/* Métricas por Plano */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -489,7 +548,7 @@ const AdminPanel = () => {
                         <p className="text-sm text-gray-600">Owner UID: {company.ownerUID}</p>
                         <div className="flex gap-2 mt-2">
                           <Badge variant="outline">{company.plan || 'premium'}</Badge>
-                          <Badge variant="secondary">{company.colaboradores?.length || 0} membros</Badge>
+                          <Badge variant="secondary">{company.collaborators?.length || 0} colaboradores</Badge>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -511,12 +570,22 @@ const AdminPanel = () => {
                                   onChange={(e) => setEditingCompany({ ...company, name: e.target.value })}
                                 />
                               </div>
-                              <Button 
-                                onClick={() => handleEditCompany(company.id, editingCompany)}
-                                className="w-full"
-                              >
-                                Salvar Alterações
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button 
+                                  onClick={() => handleEditCompany(company.id, editingCompany)}
+                                  className="flex-1"
+                                >
+                                  Salvar Alterações
+                                </Button>
+                                <Button 
+                                  variant="destructive"
+                                  onClick={() => handleDeleteCompany(company.id, company.name)}
+                                  className="flex-1"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir Empresa
+                                </Button>
+                              </div>
                             </div>
                           </DialogContent>
                         </Dialog>
@@ -533,13 +602,26 @@ const AdminPanel = () => {
                     
                     {showCompanyMembers[company.id] && (
                       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                        <h5 className="font-medium mb-2">Membros da Equipe:</h5>
-                        {company.colaboradores?.map((member, index) => (
-                          <div key={index} className="flex justify-between items-center py-1">
-                            <span className="text-sm">{member.email}</span>
-                            <Badge variant="outline">{member.role}</Badge>
-                          </div>
-                        )) || <p className="text-sm text-gray-500">Nenhum membro encontrado</p>}
+                        <h5 className="font-medium mb-2">Colaboradores da Equipe:</h5>
+                        {company.collaborators && company.collaborators.length > 0 ? (
+                          company.collaborators.map((collaboratorUID, index) => (
+                            <div key={index} className="flex justify-between items-center py-2 border-b last:border-0">
+                              <span className="text-sm">{getCollaboratorName(collaboratorUID)}</span>
+                              <div className="flex gap-2">
+                                <Badge variant="outline">Colaborador</Badge>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRemoveCollaborator(company.id, collaboratorUID)}
+                                >
+                                  <UserMinus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500">Nenhum colaborador encontrado</p>
+                        )}
                       </div>
                     )}
                   </div>

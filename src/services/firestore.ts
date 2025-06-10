@@ -501,5 +501,17 @@ export const firestoreService = {
       console.error('❌ Erro ao atualizar status do convite:', error);
       throw error;
     }
+  },
+
+  async deleteCompany(companyId: string) {
+    try {
+      console.log('🗑️ Deletando empresa:', companyId);
+      const companyRef = doc(db, 'agencias', companyId);
+      await deleteDoc(companyRef);
+      console.log('✅ Empresa deletada com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao deletar empresa:', error);
+      throw error;
+    }
   }
 };

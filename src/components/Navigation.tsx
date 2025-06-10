@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Home, Calculator, Kanban, Users, Settings as SettingsIcon, DollarSign, Briefcase, Clock, Menu, User, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,8 +32,18 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
     { id: 'team', label: 'Equipe', icon: Users }
   ];
 
+  // Verificar se usuário é de empresa (proprietário ou colaborador) E tem agencyData
   const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
   const isAdmin = user?.userType === 'admin';
+
+  console.log('🔍 Navigation - Dados do usuário:', {
+    userType: user?.userType,
+    email: user?.email,
+    hasAgencyData: !!agencyData,
+    agencyName: agencyData?.name,
+    isCompanyUser,
+    isAdmin
+  });
 
   const handleTabChange = (tab: string) => {
     onTabChange(tab);
