@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { Job, MonthlyCost, WorkItem, Task } from '@/types';
@@ -136,128 +137,128 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Jobs methods
   const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const newJob: Job = {
       ...jobData,
       id: `job_${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      userId: user.uid
+      userId: user.id
     };
 
     const updatedJobs = [...jobs, newJob];
-    await firestoreService.updateUserField(user.uid, 'jobs', updatedJobs);
+    await firestoreService.updateUserField(user.id, 'jobs', updatedJobs);
     setJobs(updatedJobs);
     await refreshUserData();
   };
 
   const updateJob = async (id: string, jobData: Partial<Job>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const updatedJobs = jobs.map(job => 
       job.id === id ? { ...job, ...jobData, updatedAt: new Date().toISOString() } : job
     );
     
-    await firestoreService.updateUserField(user.uid, 'jobs', updatedJobs);
+    await firestoreService.updateUserField(user.id, 'jobs', updatedJobs);
     setJobs(updatedJobs);
     await refreshUserData();
   };
 
   const deleteJob = async (id: string) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const updatedJobs = jobs.filter(job => job.id !== id);
-    await firestoreService.updateUserField(user.uid, 'jobs', updatedJobs);
+    await firestoreService.updateUserField(user.id, 'jobs', updatedJobs);
     setJobs(updatedJobs);
     await refreshUserData();
   };
 
   // Monthly Costs methods
   const addMonthlyCost = async (costData: Omit<MonthlyCost, 'id' | 'createdAt'>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const newCost: MonthlyCost = {
       ...costData,
       id: `cost_${Date.now()}`,
       createdAt: new Date().toISOString(),
-      userId: user.uid
+      userId: user.id
     };
 
     const updatedCosts = [...monthlyCosts, newCost];
-    await firestoreService.updateUserField(user.uid, 'expenses', updatedCosts);
+    await firestoreService.updateUserField(user.id, 'expenses', updatedCosts);
     setMonthlyCosts(updatedCosts);
     await refreshUserData();
   };
 
   const updateMonthlyCost = async (id: string, costData: Partial<MonthlyCost>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const updatedCosts = monthlyCosts.map(cost => 
       cost.id === id ? { ...cost, ...costData } : cost
     );
     
-    await firestoreService.updateUserField(user.uid, 'expenses', updatedCosts);
+    await firestoreService.updateUserField(user.id, 'expenses', updatedCosts);
     setMonthlyCosts(updatedCosts);
     await refreshUserData();
   };
 
   const deleteMonthlyCost = async (id: string) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const updatedCosts = monthlyCosts.filter(cost => cost.id !== id);
-    await firestoreService.updateUserField(user.uid, 'expenses', updatedCosts);
+    await firestoreService.updateUserField(user.id, 'expenses', updatedCosts);
     setMonthlyCosts(updatedCosts);
     await refreshUserData();
   };
 
   // Work Items methods
   const addWorkItem = async (itemData: Omit<WorkItem, 'id' | 'createdAt'>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const newItem: WorkItem = {
       ...itemData,
       id: `item_${Date.now()}`,
       createdAt: new Date().toISOString(),
-      userId: user.uid
+      userId: user.id
     };
 
     const updatedItems = [...workItems, newItem];
-    await firestoreService.updateUserField(user.uid, 'equipments', updatedItems);
+    await firestoreService.updateUserField(user.id, 'equipments', updatedItems);
     setWorkItems(updatedItems);
     await refreshUserData();
   };
 
   const updateWorkItem = async (id: string, itemData: Partial<WorkItem>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const updatedItems = workItems.map(item => 
       item.id === id ? { ...item, ...itemData } : item
     );
     
-    await firestoreService.updateUserField(user.uid, 'equipments', updatedItems);
+    await firestoreService.updateUserField(user.id, 'equipments', updatedItems);
     setWorkItems(updatedItems);
     await refreshUserData();
   };
 
   const deleteWorkItem = async (id: string) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const updatedItems = workItems.filter(item => item.id !== id);
-    await firestoreService.updateUserField(user.uid, 'equipments', updatedItems);
+    await firestoreService.updateUserField(user.id, 'equipments', updatedItems);
     setWorkItems(updatedItems);
     await refreshUserData();
   };
 
   // Tasks methods
   const addTask = async (taskData: Omit<Task, 'id' | 'createdAt'>) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     const newTask: Task = {
       ...taskData,
       id: `task_${Date.now()}`,
       createdAt: new Date().toISOString(),
-      userId: user.uid
+      userId: user.id
     };
 
     const updatedTasks = [...tasks, newTask];
@@ -279,11 +280,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Work Routine methods
   const updateWorkRoutine = async (routineData: Partial<WorkRoutine>) => {
-    if (!user?.uid || !workRoutine) return;
+    if (!user?.id || !workRoutine) return;
     
     const updatedRoutine = { ...workRoutine, ...routineData };
     
-    await firestoreService.updateUserField(user.uid, 'routine', {
+    await firestoreService.updateUserField(user.id, 'routine', {
       desiredSalary: updatedRoutine.desiredSalary,
       workDays: updatedRoutine.workDaysPerMonth,
       dailyHours: updatedRoutine.workHoursPerDay,
@@ -297,7 +298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshJobs = async () => {
     console.log('🔄 Recarregando jobs...');
-    if (user?.uid) {
+    if (user?.id) {
       await refreshUserData();
     }
   };

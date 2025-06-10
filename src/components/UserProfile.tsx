@@ -29,6 +29,11 @@ const UserProfile = () => {
   const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'company_colab';
   const userSubscription = userData?.subscription || { plan: 'free', status: 'active' };
 
+  // Normalize subscription to always have plan property
+  const normalizedSubscription = typeof userSubscription === 'string' 
+    ? { plan: userSubscription, status: 'active' }
+    : userSubscription;
+
   useEffect(() => {
     if (userData) {
       setFormData({
@@ -43,7 +48,7 @@ const UserProfile = () => {
   }, [userData]);
 
   const getUserTypeDisplay = (userType: string) => {
-    const types: Record<string, { label: string; icon: React.ComponentType; color: string }> = {
+    const types: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
       admin: { label: 'Administrador', icon: Shield, color: 'bg-purple-100 text-purple-800' },
       company_owner: { label: 'Dono da Empresa', icon: Crown, color: 'bg-yellow-100 text-yellow-800' },
       company_colab: { label: 'Colaborador', icon: Users, color: 'bg-blue-100 text-blue-800' },
@@ -320,7 +325,7 @@ const UserProfile = () => {
                   <span className="text-sm">Membro desde</span>
                 </div>
                 <span className="text-sm font-medium">
-                  {new Date(userData.createdAt).toLocaleDateString('pt-BR')}
+                  {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString('pt-BR') : 'Data não disponível'}
                 </span>
               </div>
 
@@ -341,8 +346,8 @@ const UserProfile = () => {
                     <Crown className="h-4 w-4 text-gray-500" />
                     <span className="text-sm">Plano</span>
                   </div>
-                  <Badge variant={userSubscription.plan === 'premium' ? 'default' : 'secondary'}>
-                    {userSubscription.plan === 'premium' ? 'Premium' : 'Gratuito'}
+                  <Badge variant={normalizedSubscription.plan === 'premium' ? 'default' : 'secondary'}>
+                    {normalizedSubscription.plan === 'premium' ? 'Premium' : 'Gratuito'}
                   </Badge>
                 </div>
               )}
