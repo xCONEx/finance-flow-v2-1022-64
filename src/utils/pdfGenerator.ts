@@ -1,3 +1,4 @@
+
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Job, WorkItem, MonthlyCost } from '../types';
@@ -24,6 +25,39 @@ const COLORS = {
   gray: [156, 163, 175] as [number, number, number]
 };
 
+const addLogoToDocument = (doc: jsPDF, logobase64: string, pageWidth: number, margin: number) => {
+  if (!logobase64) return;
+  
+  try {
+    // Criar uma imagem temporária para obter dimensões
+    const img = new Image();
+    
+    // Função síncrona para adicionar logo
+    const addLogo = () => {
+      try {
+        const maxSize = 30; // Tamanho máximo aumentado
+        const logoX = pageWidth - maxSize - margin;
+        const logoY = 5;
+        
+        // Adicionar sombra leve
+        doc.setFillColor(0, 0, 0, 0.1);
+        doc.rect(logoX + 1, logoY + 1, maxSize, maxSize, 'F');
+        
+        // Adicionar logo mantendo proporção original
+        doc.addImage(logobase64, 'PNG', logoX, logoY, maxSize, maxSize);
+      } catch (error) {
+        console.log('Erro ao adicionar logo:', error);
+      }
+    };
+    
+    // Tentar adicionar logo diretamente
+    addLogo();
+    
+  } catch (error) {
+    console.log('Erro ao processar logo:', error);
+  }
+};
+
 export const generateJobPDF = async (job: Job, userData: any) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -36,53 +70,14 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   
   // Título principal com descrição - tamanho reduzido
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
+  doc.setFontSize(14); // Reduzido de 16 para 14
   doc.setFont(undefined, 'bold');
   const headerText = `ORÇAMENTO - ${job.description || 'Serviço'}`;
   doc.text(headerText, margin, 22);
 
-  // Logo premium no header se disponível - tamanho responsivo
+  // Logo premium no header se disponível
   if (userData?.logobase64) {
-    try {
-      // Criar uma imagem temporária para obter dimensões
-      const img = new Image();
-      img.onload = function(this: HTMLImageElement) {
-        const imgWidth = this.width;
-        const imgHeight = this.height;
-        const aspectRatio = imgWidth / imgHeight;
-        
-        // Definir tamanho máximo e calcular dimensões proporcionais
-        const maxSize = 25;
-        let logoWidth, logoHeight;
-        
-        if (aspectRatio > 1) {
-          // Imagem mais larga
-          logoWidth = Math.min(maxSize, imgWidth / 4);
-          logoHeight = logoWidth / aspectRatio;
-        } else {
-          // Imagem mais alta ou quadrada
-          logoHeight = Math.min(maxSize, imgHeight / 4);
-          logoWidth = logoHeight * aspectRatio;
-        }
-        
-        const logoX = pageWidth - logoWidth - margin;
-        const logoY = (35 - logoHeight) / 2; // Centralizar verticalmente no header
-        
-        doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoWidth, logoHeight);
-      };
-      
-      // Fallback para caso a imagem não carregue
-      img.onerror = function() {
-        const logoSize = 25;
-        const logoX = pageWidth - logoSize - margin;
-        const logoY = 5;
-        doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
-      };
-      
-      img.src = userData.logobase64;
-    } catch (error) {
-      console.log('Erro ao adicionar logo:', error);
-    }
+    addLogoToDocument(doc, userData.logobase64, pageWidth, margin);
   }
 
   currentY = 50;
@@ -140,7 +135,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
     tableData.push(['Valor com desconto', valorComDesconto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]);
   }
 
-  // Criar tabela estilizada
+  // Criar tabela estilizada - versão corrigida
   try {
     (doc as any).autoTable({
       startY: currentY,
@@ -168,7 +163,8 @@ export const generateJobPDF = async (job: Job, userData: any) => {
       columnStyles: {
         0: { halign: 'left', cellWidth: 'auto' },
         1: { halign: 'right', cellWidth: 'auto' }
-      }
+      },
+      margin: { left: margin, right: margin }
     });
 
     currentY = (doc as any).lastAutoTable.finalY + 15;
@@ -179,13 +175,27 @@ export const generateJobPDF = async (job: Job, userData: any) => {
     doc.setFont(undefined, 'bold');
     doc.setTextColor(...COLORS.text);
     
-    currentY += 10;
+    // Cabeçalho manual
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text('ITEM', margin + 5, currentY + 6);
+    doc.text('VALOR', pageWidth - margin - 50, currentY + 6);
+    
+    currentY += 12;
+    doc.setTextColor(...COLORS.text);
     doc.setFont(undefined, 'normal');
     doc.setFontSize(11);
     
     tableData.forEach((row, index) => {
-      doc.text(row[0], margin, currentY + (index * 8));
-      doc.text(row[1], pageWidth - margin - 50, currentY + (index * 8));
+      const rowY = currentY + (index * 8);
+      // Alternar cores das linhas
+      if (index % 2 === 1) {
+        doc.setFillColor(...COLORS.background);
+        doc.rect(margin, rowY - 2, pageWidth - (margin * 2), 8, 'F');
+      }
+      doc.text(row[0], margin + 5, rowY + 4);
+      doc.text(row[1], pageWidth - margin - 50, rowY + 4);
     });
     
     currentY += (tableData.length * 8) + 15;
@@ -221,14 +231,7 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
 
   // Logo premium se disponível
   if (userData?.logobase64) {
-    try {
-      const logoSize = 25;
-      const logoX = pageWidth - logoSize - margin;
-      const logoY = 5;
-      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
-    } catch (error) {
-      console.log('Erro ao adicionar logo:', error);
-    }
+    addLogoToDocument(doc, userData.logobase64, pageWidth, margin);
   }
 
   currentY = 55;
@@ -290,7 +293,8 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
         styles: {
           lineColor: COLORS.textLight,
           lineWidth: 0.3
-        }
+        },
+        margin: { left: margin, right: margin }
       });
 
       currentY = (doc as any).lastAutoTable.finalY + 10;
@@ -339,14 +343,7 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
 
   // Logo premium se disponível
   if (userData?.logobase64) {
-    try {
-      const logoSize = 25;
-      const logoX = pageWidth - logoSize - margin;
-      const logoY = 5;
-      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
-    } catch (error) {
-      console.log('Erro ao adicionar logo:', error);
-    }
+    addLogoToDocument(doc, userData.logobase64, pageWidth, margin);
   }
 
   currentY = 55;
@@ -409,7 +406,8 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
         styles: {
           lineColor: COLORS.textLight,
           lineWidth: 0.3
-        }
+        },
+        margin: { left: margin, right: margin }
       });
 
       currentY = (doc as any).lastAutoTable.finalY + 10;
