@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Plus, Trash2, DollarSign, Edit, FileText, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { generateExpensesPDF from '../utils/pdfGenerator';
+import { generateExpensesPDF } from '../utils/pdfGenerator';
 import ExpenseModal from './ExpenseModal';
 
 const MonthlyCosts = () => {
