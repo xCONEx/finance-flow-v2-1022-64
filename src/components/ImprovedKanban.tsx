@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -67,20 +66,20 @@ const ImprovedKanban = () => {
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const { user, agencyData } = useAuth();
+  const { user, companyData } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
     loadKanbanData();
     loadTeamMembers();
-  }, [agencyData]);
+  }, [companyData]);
 
   const loadTeamMembers = async () => {
-    if (!agencyData) return;
+    if (!companyData) return;
     
     try {
       console.log('👥 Carregando membros da equipe...');
-      const members = agencyData.colaboradores || [];
+      const members = companyData.collaborators || [];
       setTeamMembers(members);
       console.log('✅ Membros carregados:', members.length);
     } catch (error) {
@@ -89,16 +88,16 @@ const ImprovedKanban = () => {
   };
 
   const loadKanbanData = async () => {
-    if (!agencyData) {
+    if (!companyData) {
       console.log('❌ Usuário não faz parte de uma empresa');
       return;
     }
 
     try {
-      console.log('Carregando dados do Kanban para empresa:', agencyData.id);
+      console.log('Carregando dados do Kanban para empresa:', companyData.id);
       
       // Tentar carregar board existente do Firebase
-      const existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
+      const existingBoard = await firestoreService.getKanbanBoard(companyData.id);
       
       if (existingBoard) {
         console.log('✅ Board existente carregado do Firebase');
@@ -138,7 +137,7 @@ const ImprovedKanban = () => {
   };
 
   const sendNotificationToTeam = async (message: string) => {
-    if (!agencyData || !('Notification' in window)) return;
+    if (!companyData || !('Notification' in window)) return;
 
     try {
       // Solicitar permissão se necessário
@@ -225,11 +224,11 @@ const ImprovedKanban = () => {
   };
 
   const saveKanbanState = async (boardData: KanbanBoard) => {
-    if (!agencyData) return;
+    if (!companyData) return;
 
     try {
       console.log('Salvando estado do Kanban no Firebase...');
-      await firestoreService.saveKanbanBoard(agencyData.id, boardData);
+      await firestoreService.saveKanbanBoard(companyData.id, boardData);
     } catch (error) {
       console.error('Erro ao salvar Kanban:', error);
     }
@@ -399,7 +398,7 @@ const ImprovedKanban = () => {
   const currentBoard = boards[activeBoard] || {};
 
   // Verificar se o usuário faz parte de uma empresa
-  if (!agencyData) {
+  if (!companyData) {
     return (
       <div className="text-center py-16">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
@@ -425,7 +424,7 @@ const ImprovedKanban = () => {
             Kanban de Projetos
           </h2>
           <p className="text-gray-600">
-            {agencyData.name} - Gerencie o fluxo dos seus projetos
+            {companyData.name} - Gerencie o fluxo dos seus projetos
           </p>
         </div>
 
@@ -739,3 +738,5 @@ const ImprovedKanban = () => {
 };
 
 export default ImprovedKanban;
+
+}

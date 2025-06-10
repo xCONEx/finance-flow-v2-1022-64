@@ -18,7 +18,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { user } = useAuth();
 
-  const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'employee';
+  const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'company_colab';
   const isAdmin = user?.userType === 'admin';
 
   const renderContent = () => {
