@@ -97,52 +97,60 @@ export const firestoreService = {
 
   async getUserAgency(uid: string) {
     try {
-      console.log('Verificando agência do usuário:', uid);
-      const agenciasRef = collection(db, 'agencias');
+      console.log('🏢 Verificando agência do usuário:', uid);
       
-      // Buscar agências onde o usuário é dono
+      // Primeiro buscar se o usuário é dono de alguma agência
+      const agenciasRef = collection(db, 'agencias');
       const ownerQuery = query(agenciasRef, where('ownerUID', '==', uid));
-      const ownerSnapshot = await getDocs(ownerQuery);
-
-      if (!ownerSnapshot.empty) {
-        const agencyDoc = ownerSnapshot.docs[0];
-        console.log('Agência encontrada como dono:', agencyDoc.id);
-        return { id: agencyDoc.id, ...agencyDoc.data() };
+      
+      try {
+        const ownerSnapshot = await getDocs(ownerQuery);
+        if (!ownerSnapshot.empty) {
+          const agencyDoc = ownerSnapshot.docs[0];
+          console.log('✅ Agência encontrada como dono:', agencyDoc.id);
+          return { id: agencyDoc.id, ...agencyDoc.data() };
+        }
+      } catch (error) {
+        console.log('⚠️ Erro ao buscar como dono (pode ser limitação de permissão):', error);
       }
 
-      // Buscar agências onde o usuário é colaborador
-      const collabQuery = query(agenciasRef, where('colaboradores', 'array-contains', uid));
-      const collabSnapshot = await getDocs(collabQuery);
+      // Buscar se é colaborador (array contains)
+      try {
+        const collabQuery = query(agenciasRef, where('colaboradores', 'array-contains', uid));
+        const collabSnapshot = await getDocs(collabQuery);
 
-      if (!collabSnapshot.empty) {
-        const agencyDoc = collabSnapshot.docs[0];
-        console.log('Agência encontrada como colaborador:', agencyDoc.id);
-        return { id: agencyDoc.id, ...agencyDoc.data() };
+        if (!collabSnapshot.empty) {
+          const agencyDoc = collabSnapshot.docs[0];
+          console.log('✅ Agência encontrada como colaborador:', agencyDoc.id);
+          return { id: agencyDoc.id, ...agencyDoc.data() };
+        }
+      } catch (error) {
+        console.log('⚠️ Erro ao buscar como colaborador (pode ser limitação de permissão):', error);
       }
 
-      console.log('Usuário não pertence a nenhuma agência');
+      console.log('👤 Usuário não pertence a nenhuma agência');
       return null;
     } catch (error) {
-      console.error('Erro ao verificar agência:', error);
-      throw error;
+      console.error('❌ Erro geral ao verificar agência:', error);
+      return null; // Retornar null em vez de throw para não quebrar o fluxo
     }
   },
 
-  async getAllAgencies() {
+  async getAgencyData(agencyId: string) {
     try {
-      console.log('🏢 Buscando todas as agências...');
-      const agenciasRef = collection(db, 'agencias');
-      const snapshot = await getDocs(agenciasRef);
+      console.log('🏢 Buscando dados da agência:', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
       
-      const agencies = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      if (agencyDoc.exists()) {
+        console.log('✅ Dados da agência encontrados');
+        return { id: agencyDoc.id, ...agencyDoc.data() };
+      }
       
-      console.log('✅ Agências encontradas:', agencies.length);
-      return agencies;
+      console.log('❌ Agência não encontrada');
+      return null;
     } catch (error) {
-      console.error('❌ Erro ao buscar agências:', error);
+      console.error('❌ Erro ao buscar dados da agência:', error);
       throw error;
     }
   },
@@ -187,11 +195,11 @@ export const firestoreService = {
   async sendInvite(inviteData: any) {
     try {
       console.log('📧 Enviando convite:', inviteData);
-      const invitesRef = collection(db, 'invites'); // Usar 'invites' conforme as regras
+      const invitesRef = collection(db, 'invites');
       
       const newInvite = {
         ...inviteData,
-        agenciaId: inviteData.companyId, // Manter consistência com as regras
+        agenciaId: inviteData.companyId,
         email: inviteData.email,
         sentAt: serverTimestamp(),
         createdAt: serverTimestamp()
@@ -209,7 +217,7 @@ export const firestoreService = {
   async getCompanyInvites(companyId: string) {
     try {
       console.log('📋 Buscando convites da empresa:', companyId);
-      const invitesRef = collection(db, 'invites'); // Usar 'invites' conforme as regras
+      const invitesRef = collection(db, 'invites');
       const q = query(invitesRef, where('agenciaId', '==', companyId));
       const snapshot = await getDocs(q);
       
@@ -236,7 +244,7 @@ export const firestoreService = {
         const data = agencyDoc.data();
         const colaboradores = data.colaboradores || [];
         
-        // Filtrar o UID do colaborador (não o objeto inteiro)
+        // Filtrar o UID do colaborador
         const updatedColaboradores = colaboradores.filter(uid => uid !== memberId);
         
         await updateDoc(agencyRef, {
@@ -269,28 +277,9 @@ export const firestoreService = {
     }
   },
 
-  async getAgencyData(agencyId: string) {
-    try {
-      console.log('🏢 Buscando dados da agência:', agencyId);
-      const agencyRef = doc(db, 'agencias', agencyId);
-      const agencyDoc = await getDoc(agencyRef);
-      
-      if (agencyDoc.exists()) {
-        console.log('✅ Dados da agência encontrados');
-        return { id: agencyDoc.id, ...agencyDoc.data() };
-      }
-      
-      console.log('❌ Agência não encontrada');
-      return null;
-    } catch (error) {
-      console.error('❌ Erro ao buscar dados da agência:', error);
-      throw error;
-    }
-  },
-
   async getAllUsers() {
     try {
-      console.log('👥 Buscando todos os usuários...');
+      console.log('👥 [ADMIN] Buscando todos os usuários...');
       const usersRef = collection(db, 'usuarios');
       const snapshot = await getDocs(usersRef);
       
@@ -302,14 +291,14 @@ export const firestoreService = {
       console.log('✅ Usuários encontrados:', users.length);
       return users;
     } catch (error) {
-      console.error('❌ Erro ao buscar usuários:', error);
+      console.error('❌ Erro ao buscar usuários (pode não ser admin):', error);
       throw error;
     }
   },
 
   async getAllCompanies() {
     try {
-      console.log('🏢 Buscando todas as empresas...');
+      console.log('🏢 [ADMIN] Buscando todas as empresas...');
       const companiesRef = collection(db, 'agencias');
       const snapshot = await getDocs(companiesRef);
       
@@ -321,14 +310,14 @@ export const firestoreService = {
       console.log('✅ Empresas encontradas:', companies.length);
       return companies;
     } catch (error) {
-      console.error('❌ Erro ao buscar empresas:', error);
+      console.error('❌ Erro ao buscar empresas (pode não ser admin):', error);
       throw error;
     }
   },
 
   async getAnalyticsData() {
     try {
-      console.log('📊 Calculando dados de analytics...');
+      console.log('📊 [ADMIN] Calculando dados de analytics...');
       
       const [users, companies] = await Promise.all([
         this.getAllUsers(),
@@ -452,7 +441,7 @@ export const firestoreService = {
   async getUserInvites(userEmail: string) {
     try {
       console.log('📨 Buscando convites para:', userEmail);
-      const invitesRef = collection(db, 'invites'); // Usar 'invites' conforme as regras
+      const invitesRef = collection(db, 'invites');
       const q = query(
         invitesRef, 
         where('email', '==', userEmail),
@@ -469,7 +458,7 @@ export const firestoreService = {
       return invites;
     } catch (error) {
       console.error('❌ Erro ao buscar convites:', error);
-      throw error;
+      return []; // Retornar array vazio em vez de throw
     }
   },
 
@@ -480,18 +469,16 @@ export const firestoreService = {
       // Atualizar status do convite
       await this.updateInviteStatus(inviteId, 'accepted');
       
-      // Adicionar usuário à empresa como colaborador (apenas UID)
+      // Adicionar usuário à empresa como colaborador
       const companyData = await this.getAgencyData(companyId);
       if (companyData) {
         const colaboradores = companyData.colaboradores || [];
         
-        // Adicionar apenas o UID do usuário
         if (!colaboradores.includes(userId)) {
           const updatedCollaborators = [...colaboradores, userId];
           await this.updateCompanyField(companyId, 'colaboradores', updatedCollaborators);
         }
         
-        // Atualizar tipo do usuário
         await this.updateUserField(userId, 'userType', 'employee');
         await this.updateUserField(userId, 'companyId', companyId);
       }
@@ -506,7 +493,7 @@ export const firestoreService = {
   async updateInviteStatus(inviteId: string, status: string) {
     try {
       console.log('📝 Atualizando status do convite:', inviteId, status);
-      const inviteRef = doc(db, 'invites', inviteId); // Usar 'invites' conforme as regras
+      const inviteRef = doc(db, 'invites', inviteId);
       await updateDoc(inviteRef, {
         status,
         updatedAt: serverTimestamp()

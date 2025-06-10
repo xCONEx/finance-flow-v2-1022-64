@@ -55,29 +55,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Recarregar dados da agência se aplicável
       if (user.userType === 'company_owner' || user.userType === 'employee') {
-        const allAgencies = await firestoreService.getAllAgencies();
-        
-        for (const agency of allAgencies) {
-          const agencyData = agency as any;
-          
-          const isOwner = (
-            (agencyData.ownerId && agencyData.ownerId === user.id) ||
-            (agencyData.ownerUID && agencyData.ownerUID === user.id) ||
-            (agencyData.owner && agencyData.owner === user.id) ||
-            (agencyData.owner && agencyData.owner === user.email) ||
-            (agencyData.ownerId && agencyData.ownerId === user.email)
-          );
-          
-          const isCollaborator = agencyData.colaboradores && Array.isArray(agencyData.colaboradores) && 
-            agencyData.colaboradores.some((colab: any) => 
-              colab.uid === user.id || colab.email === user.email
-            );
-          
-          if (isOwner || isCollaborator) {
-            setAgencyData(agencyData);
-            console.log('✅ Dados da agência atualizados');
-            break;
-          }
+        const userAgency = await firestoreService.getUserAgency(user.id);
+        if (userAgency) {
+          setAgencyData(userAgency);
+          console.log('✅ Dados da agência atualizados');
         }
       }
       
@@ -125,62 +106,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
 
-          // CORRIGIDO: Verificação mais robusta para proprietário da agência
+          // Verificar se usuário pertence a uma agência
           console.log('🏢 Verificando se usuário pertence a uma agência...');
           let userAgency = null;
           let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
           
           try {
-            // Buscar por agências onde o usuário é colaborador
-            const allAgencies = await firestoreService.getAllAgencies();
-            console.log('🔍 Verificando agências:', allAgencies.length);
-            
-            for (const agency of allAgencies) {
-              const agencyData = agency as any; // Type assertion to avoid TypeScript errors
-              
-              console.log('🔍 Verificando agência:', agencyData.id, {
-                ownerId: agencyData.ownerId,
-                ownerUID: agencyData.ownerUID,
-                owner: agencyData.owner,
-                userUID: firebaseUser.uid,
-                userEmail: firebaseUser.email
-              });
-              
-              // CORRIGIDO: Verificar múltiplos campos possíveis para proprietário
-              const isOwner = (
-                (agencyData.ownerId && agencyData.ownerId === firebaseUser.uid) ||
-                (agencyData.ownerUID && agencyData.ownerUID === firebaseUser.uid) ||
-                (agencyData.owner && agencyData.owner === firebaseUser.uid) ||
-                (agencyData.owner && agencyData.owner === firebaseUser.email) ||
-                (agencyData.ownerId && agencyData.ownerId === firebaseUser.email)
-              );
-              
-              if (isOwner) {
-                userAgency = agencyData;
-                userType = 'company_owner';
-                console.log('👑 Usuário é DONO da agência:', agencyData.id);
-                console.log('✅ Tipo identificado: PROPRIETÁRIO');
-                break;
-              }
-              
-              // Verificar se é colaborador
-              if (agencyData.colaboradores && Array.isArray(agencyData.colaboradores)) {
-                const isCollaborator = agencyData.colaboradores.some((colab: any) => 
-                  colab.uid === firebaseUser.uid || colab.email === firebaseUser.email
-                );
-                
-                if (isCollaborator) {
-                  userAgency = agencyData;
-                  userType = 'employee';
-                  console.log('👥 Usuário é colaborador da agência:', agencyData.id);
-                  break;
-                }
-              }
-            }
+            // Usar o método getUserAgency que respeita as permissões
+            userAgency = await firestoreService.getUserAgency(firebaseUser.uid);
             
             if (userAgency) {
-              console.log('🏢 Usuário encontrado em agência:', userAgency.id);
-              console.log('📦 Dados da agência carregados:', {
+              // Verificar se é dono ou colaborador
+              if (userAgency.ownerUID === firebaseUser.uid) {
+                userType = 'company_owner';
+                console.log('👑 Usuário é PROPRIETÁRIO da agência:', userAgency.id);
+              } else if (userAgency.colaboradores && userAgency.colaboradores.includes(firebaseUser.uid)) {
+                userType = 'employee';
+                console.log('👥 Usuário é COLABORADOR da agência:', userAgency.id);
+              }
+              
+              console.log('🏢 Dados da agência carregados:', {
                 equipments: userAgency.equipments?.length || 0,
                 expenses: userAgency.expenses?.length || 0,
                 jobs: userAgency.jobs?.length || 0,
@@ -193,12 +138,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             
           } catch (error) {
-            console.error('❌ Erro ao buscar agências:', error);
+            console.error('❌ Erro ao buscar agência do usuário:', error);
             setAgencyData(null);
           }
 
           // Verificar se é admin
-          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com';
+          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
           if (isAdmin) {
             userType = 'admin';
           }
