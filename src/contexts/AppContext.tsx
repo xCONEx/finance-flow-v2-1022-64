@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Job, MonthlyCost, WorkItem, Task, WorkRoutine } from '../types';
 import { useAuth } from './AuthContext';
@@ -37,7 +38,17 @@ export const useAppContext = () => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, userData, agencyData } = useAuth();
+  // Verificar se estamos dentro do AuthProvider antes de usar useAuth
+  let authData;
+  try {
+    authData = useAuth();
+  } catch (error) {
+    console.log('AuthProvider não está disponível ainda, renderizando children sem dados');
+    // Se AuthProvider não estiver disponível, renderizar apenas os children
+    return <>{children}</>;
+  }
+
+  const { user, userData, agencyData } = authData;
   const [jobs, setJobs] = useState<Job[]>([]);
   const [monthlyCosts, setMonthlyCosts] = useState<MonthlyCost[]>([]);
   const [workItems, setWorkItems] = useState<WorkItem[]>([]);
