@@ -37,6 +37,11 @@ const CostDistributionChart = () => {
     );
   }
 
+  const customTooltipFormatter = (value: any) => {
+    const numValue = typeof value === 'number' ? value : 0;
+    return formatValue(numValue);
+  };
+
   return (
     <div className="space-y-4 flex flex-col items-center justify-center w-full">
       {/* Gráfico centralizado responsivo */}
@@ -57,7 +62,7 @@ const CostDistributionChart = () => {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value: number) => formatValue(value)} />
+              <Tooltip formatter={customTooltipFormatter} />
             </PieChart>
           </ResponsiveContainer>
         </div>

@@ -1,14 +1,49 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { Job } from '@/types';
+import { Job, MonthlyCost, WorkItem, Task } from '@/types';
+import { firestoreService } from '../services/firestore';
+
+interface WorkRoutine {
+  desiredSalary: number;
+  workDaysPerMonth: number;
+  workHoursPerDay: number;
+  valuePerDay: number;
+  valuePerHour: number;
+}
 
 interface AppContextType {
+  // Jobs
   jobs: Job[];
   totalRevenue: number;
   totalCosts: number;
   profit: number;
   loading: boolean;
   refreshJobs: () => Promise<void>;
+  addJob: (job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateJob: (id: string, job: Partial<Job>) => Promise<void>;
+  deleteJob: (id: string) => Promise<void>;
+  
+  // Monthly Costs
+  monthlyCosts: MonthlyCost[];
+  addMonthlyCost: (cost: Omit<MonthlyCost, 'id' | 'createdAt'>) => Promise<void>;
+  updateMonthlyCost: (id: string, cost: Partial<MonthlyCost>) => Promise<void>;
+  deleteMonthlyCost: (id: string) => Promise<void>;
+  
+  // Work Items
+  workItems: WorkItem[];
+  addWorkItem: (item: Omit<WorkItem, 'id' | 'createdAt'>) => Promise<void>;
+  updateWorkItem: (id: string, item: Partial<WorkItem>) => Promise<void>;
+  deleteWorkItem: (id: string) => Promise<void>;
+  
+  // Tasks
+  tasks: Task[];
+  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
+  updateTask: (id: string, task: Partial<Task>) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  
+  // Work Routine
+  workRoutine: WorkRoutine | null;
+  updateWorkRoutine: (routine: Partial<WorkRoutine>) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -22,11 +57,20 @@ export const useApp = () => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, userData, companyData, refreshUserData } = useAuth();
+  const { user, userData, refreshUserData } = useAuth();
+  
+  // Jobs state
   const [jobs, setJobs] = useState<Job[]>([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalCosts, setTotalCosts] = useState(0);
   const [profit, setProfit] = useState(0);
+  
+  // Other entities state
+  const [monthlyCosts, setMonthlyCosts] = useState<MonthlyCost[]>([]);
+  const [workItems, setWorkItems] = useState<WorkItem[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [workRoutine, setWorkRoutine] = useState<WorkRoutine | null>(null);
+  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,30 +86,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLoading(true);
       console.log('📊 Carregando dados do usuário...');
 
-      // Calcular valuePerHour se não existir
-      let valuePerHour = userData.routine.valuePerHour;
-      if (!valuePerHour && userData.routine.desiredSalary && userData.routine.workDays && userData.routine.dailyHours) {
-        valuePerHour = userData.routine.desiredSalary / (userData.routine.workDays * userData.routine.dailyHours);
-      }
-
-      // Carregar jobs do usuário
+      // Load jobs
       const userJobs = userData.jobs || [];
       setJobs(userJobs);
-      console.log(`✅ ${userJobs.length} jobs carregados`);
 
-      // Calcular totais
+      // Load monthly costs
+      const userMonthlyCosts = userData.expenses || [];
+      setMonthlyCosts(userMonthlyCosts);
+
+      // Load work items
+      const userWorkItems = userData.equipments || [];
+      setWorkItems(userWorkItems);
+
+      // Load tasks (mock data for now)
+      const userTasks: Task[] = [];
+      setTasks(userTasks);
+
+      // Load work routine
+      if (userData.routine) {
+        const routine: WorkRoutine = {
+          desiredSalary: userData.routine.desiredSalary || 0,
+          workDaysPerMonth: userData.routine.workDays || 22,
+          workHoursPerDay: userData.routine.dailyHours || 8,
+          valuePerDay: userData.routine.dalilyValue || 0,
+          valuePerHour: userData.routine.valuePerHour || 0
+        };
+        setWorkRoutine(routine);
+      }
+
+      // Calculate totals
       let revenue = 0;
       let costs = 0;
       userJobs.forEach(job => {
-        revenue += job.serviceValue;
-        costs += job.totalCosts;
+        revenue += job.serviceValue || 0;
+        costs += job.totalCosts || 0;
       });
 
       setTotalRevenue(revenue);
       setTotalCosts(costs);
       setProfit(revenue - costs);
 
-      console.log('💰 Totais calculados:', { revenue, costs, profit });
+      console.log('✅ Dados carregados com sucesso');
     } catch (error) {
       console.error('❌ Erro ao carregar dados:', error);
     } finally {
@@ -73,21 +134,208 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Jobs methods
+  const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!user?.uid) return;
+    
+    const newJob: Job = {
+      ...jobData,
+      id: `job_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      userId: user.uid
+    };
+
+    const updatedJobs = [...jobs, newJob];
+    await firestoreService.updateUserField(user.uid, 'jobs', updatedJobs);
+    setJobs(updatedJobs);
+    await refreshUserData();
+  };
+
+  const updateJob = async (id: string, jobData: Partial<Job>) => {
+    if (!user?.uid) return;
+    
+    const updatedJobs = jobs.map(job => 
+      job.id === id ? { ...job, ...jobData, updatedAt: new Date().toISOString() } : job
+    );
+    
+    await firestoreService.updateUserField(user.uid, 'jobs', updatedJobs);
+    setJobs(updatedJobs);
+    await refreshUserData();
+  };
+
+  const deleteJob = async (id: string) => {
+    if (!user?.uid) return;
+    
+    const updatedJobs = jobs.filter(job => job.id !== id);
+    await firestoreService.updateUserField(user.uid, 'jobs', updatedJobs);
+    setJobs(updatedJobs);
+    await refreshUserData();
+  };
+
+  // Monthly Costs methods
+  const addMonthlyCost = async (costData: Omit<MonthlyCost, 'id' | 'createdAt'>) => {
+    if (!user?.uid) return;
+    
+    const newCost: MonthlyCost = {
+      ...costData,
+      id: `cost_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      userId: user.uid
+    };
+
+    const updatedCosts = [...monthlyCosts, newCost];
+    await firestoreService.updateUserField(user.uid, 'expenses', updatedCosts);
+    setMonthlyCosts(updatedCosts);
+    await refreshUserData();
+  };
+
+  const updateMonthlyCost = async (id: string, costData: Partial<MonthlyCost>) => {
+    if (!user?.uid) return;
+    
+    const updatedCosts = monthlyCosts.map(cost => 
+      cost.id === id ? { ...cost, ...costData } : cost
+    );
+    
+    await firestoreService.updateUserField(user.uid, 'expenses', updatedCosts);
+    setMonthlyCosts(updatedCosts);
+    await refreshUserData();
+  };
+
+  const deleteMonthlyCost = async (id: string) => {
+    if (!user?.uid) return;
+    
+    const updatedCosts = monthlyCosts.filter(cost => cost.id !== id);
+    await firestoreService.updateUserField(user.uid, 'expenses', updatedCosts);
+    setMonthlyCosts(updatedCosts);
+    await refreshUserData();
+  };
+
+  // Work Items methods
+  const addWorkItem = async (itemData: Omit<WorkItem, 'id' | 'createdAt'>) => {
+    if (!user?.uid) return;
+    
+    const newItem: WorkItem = {
+      ...itemData,
+      id: `item_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      userId: user.uid
+    };
+
+    const updatedItems = [...workItems, newItem];
+    await firestoreService.updateUserField(user.uid, 'equipments', updatedItems);
+    setWorkItems(updatedItems);
+    await refreshUserData();
+  };
+
+  const updateWorkItem = async (id: string, itemData: Partial<WorkItem>) => {
+    if (!user?.uid) return;
+    
+    const updatedItems = workItems.map(item => 
+      item.id === id ? { ...item, ...itemData } : item
+    );
+    
+    await firestoreService.updateUserField(user.uid, 'equipments', updatedItems);
+    setWorkItems(updatedItems);
+    await refreshUserData();
+  };
+
+  const deleteWorkItem = async (id: string) => {
+    if (!user?.uid) return;
+    
+    const updatedItems = workItems.filter(item => item.id !== id);
+    await firestoreService.updateUserField(user.uid, 'equipments', updatedItems);
+    setWorkItems(updatedItems);
+    await refreshUserData();
+  };
+
+  // Tasks methods
+  const addTask = async (taskData: Omit<Task, 'id' | 'createdAt'>) => {
+    if (!user?.uid) return;
+    
+    const newTask: Task = {
+      ...taskData,
+      id: `task_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      userId: user.uid
+    };
+
+    const updatedTasks = [...tasks, newTask];
+    setTasks(updatedTasks);
+    // Note: Tasks are not stored in Firestore yet, keeping in memory for now
+  };
+
+  const updateTask = async (id: string, taskData: Partial<Task>) => {
+    const updatedTasks = tasks.map(task => 
+      task.id === id ? { ...task, ...taskData } : task
+    );
+    setTasks(updatedTasks);
+  };
+
+  const deleteTask = async (id: string) => {
+    const updatedTasks = tasks.filter(task => task.id !== id);
+    setTasks(updatedTasks);
+  };
+
+  // Work Routine methods
+  const updateWorkRoutine = async (routineData: Partial<WorkRoutine>) => {
+    if (!user?.uid || !workRoutine) return;
+    
+    const updatedRoutine = { ...workRoutine, ...routineData };
+    
+    await firestoreService.updateUserField(user.uid, 'routine', {
+      desiredSalary: updatedRoutine.desiredSalary,
+      workDays: updatedRoutine.workDaysPerMonth,
+      dailyHours: updatedRoutine.workHoursPerDay,
+      dalilyValue: updatedRoutine.valuePerDay,
+      valuePerHour: updatedRoutine.valuePerHour
+    });
+    
+    setWorkRoutine(updatedRoutine);
+    await refreshUserData();
+  };
+
   const refreshJobs = async () => {
     console.log('🔄 Recarregando jobs...');
-    if (user?.id) {
+    if (user?.uid) {
       await refreshUserData();
     }
   };
 
   return (
     <AppContext.Provider value={{
+      // Jobs
       jobs,
       totalRevenue,
       totalCosts,
       profit,
       loading,
-      refreshJobs
+      refreshJobs,
+      addJob,
+      updateJob,
+      deleteJob,
+      
+      // Monthly Costs
+      monthlyCosts,
+      addMonthlyCost,
+      updateMonthlyCost,
+      deleteMonthlyCost,
+      
+      // Work Items
+      workItems,
+      addWorkItem,
+      updateWorkItem,
+      deleteWorkItem,
+      
+      // Tasks
+      tasks,
+      addTask,
+      updateTask,
+      deleteTask,
+      
+      // Work Routine
+      workRoutine,
+      updateWorkRoutine
     }}>
       {children}
     </AppContext.Provider>

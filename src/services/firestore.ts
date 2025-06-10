@@ -1,4 +1,3 @@
-
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, addDoc, deleteDoc } from 'firebase/firestore';
@@ -21,6 +20,8 @@ export default app;
 export interface FirestoreUser {
   uid: string;
   email: string;
+  name?: string;
+  photoURL?: string;
   logobase64: string;
   equipments: any[];
   expenses: any[];
@@ -40,8 +41,12 @@ export interface FirestoreUser {
     phone?: string;
     company?: string;
   };
-  subscription?: string;
+  subscription?: string | {
+    plan: string;
+    status: string;
+  };
   banned?: boolean;
+  createdAt?: string;
 }
 
 export const firestoreService = {
@@ -384,6 +389,17 @@ export const firestoreService = {
       console.log('✅ Status do convite atualizado');
     } catch (error) {
       console.error('❌ Erro ao atualizar status do convite:', error);
+      throw error;
+    }
+  },
+
+  async updateUserData(uid: string, userData: Partial<FirestoreUser>): Promise<void> {
+    try {
+      const userDocRef = doc(db, 'usuarios', uid);
+      await updateDoc(userDocRef, userData);
+      console.log(`User ${uid} data updated`);
+    } catch (error) {
+      console.error("Error updating user data: ", error);
       throw error;
     }
   },
