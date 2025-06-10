@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -155,7 +156,7 @@ const CompanyDashboard = () => {
     }
   };
 
-  const isOwner = user?.uid === agencyData?.ownerUID;
+  const isOwner = user?.id === agencyData?.ownerUID;
 
   return (
     <div className="space-y-6">
