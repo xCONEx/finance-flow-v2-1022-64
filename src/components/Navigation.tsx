@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Home, Calculator, Kanban, Users, Settings as SettingsIcon, DollarSign, Briefcase, Clock, Menu, User, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,18 +33,29 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
     { id: 'team', label: 'Equipe', icon: Users }
   ];
 
-  // Verificar se usuário é de empresa (proprietário ou colaborador) E tem agencyData
+  // CORRIGIDO: Verificar se usuário é de empresa (proprietário ou colaborador) E tem agencyData
   const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
   const isAdmin = user?.userType === 'admin';
 
-  console.log('🔍 Navigation - Dados do usuário:', {
+  console.log('🔍 Navigation - Dados completos do usuário:', {
     userType: user?.userType,
     email: user?.email,
+    uid: user?.id,
     hasAgencyData: !!agencyData,
     agencyName: agencyData?.name,
+    agencyId: agencyData?.id,
+    agencyOwnerUID: agencyData?.ownerUID,
     isCompanyUser,
     isAdmin
   });
+
+  // Log adicional para debug
+  if (user?.userType === 'company_owner' && !agencyData) {
+    console.warn('⚠️ Usuário é company_owner mas não tem agencyData!', {
+      userType: user.userType,
+      agencyData: agencyData
+    });
+  }
 
   const handleTabChange = (tab: string) => {
     onTabChange(tab);
@@ -268,3 +280,4 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
 };
 
 export default Navigation;
+

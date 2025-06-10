@@ -1,3 +1,5 @@
+
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword,
@@ -124,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             userType = 'admin';
             console.log('👑 Usuário administrador identificado');
           } else if (userAgency) {
-            // Verificar se é dono ou colaborador
+            // CORRIGIDO: Verificar se é dono OU colaborador
             if (userAgency.ownerUID === firebaseUser.uid) {
               userType = 'company_owner';
               console.log('👑 Usuário é PROPRIETÁRIO da agência:', userAgency.id);
@@ -134,6 +136,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             
             setAgencyData(userAgency);
+            console.log('🏢 Dados da agência definidos:', {
+              id: userAgency.id,
+              name: userAgency.name,
+              ownerUID: userAgency.ownerUID,
+              userType: userType
+            });
           } else {
             console.log('👤 Usuário individual (não pertence a agência)');
             setAgencyData(null);
@@ -249,3 +257,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 export default AuthProvider;
+
