@@ -15,14 +15,14 @@ declare module 'jspdf' {
 
 // Cores do FinanceFlow
 const COLORS = {
-  primary: [79, 70, 229],
-  secondary: [99, 102, 241],
-  accent: [147, 51, 234],
-  text: [31, 41, 55],
-  textLight: [107, 114, 128],
-  success: [34, 197, 94],
-  background: [248, 250, 252],
-  gray: [156, 163, 175]
+  primary: [79, 70, 229] as [number, number, number],
+  secondary: [99, 102, 241] as [number, number, number],
+  accent: [147, 51, 234] as [number, number, number],
+  text: [31, 41, 55] as [number, number, number],
+  textLight: [107, 114, 128] as [number, number, number],
+  success: [34, 197, 94] as [number, number, number],
+  background: [248, 250, 252] as [number, number, number],
+  gray: [156, 163, 175] as [number, number, number]
 };
 
 export const generateJobPDF = async (job: Job, userData: any) => {
@@ -58,7 +58,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
 
   // Detalhes do Projeto
   doc.setFillColor(...COLORS.background);
-  doc.rect(margin, currentY, pageWidth - (margin * 2), 45, 'F');
+  doc.rect(margin, currentY, pageWidth - (margin * 2), 52, 'F');
   
   doc.setTextColor(...COLORS.text);
   doc.setFontSize(14);
@@ -72,7 +72,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   doc.text(`Data do Evento: ${new Date(job.eventDate).toLocaleDateString('pt-BR')}`, margin + 5, currentY + 32);
   doc.text(`Categoria: ${job.category || 'Não informado'}`, margin + 5, currentY + 39);
 
-  currentY += 55;
+  currentY += 62;
 
   // Calcular valores
   const logistics = typeof job.logistics === 'number' ? job.logistics : 0;
