@@ -10,7 +10,8 @@ import {
   where,
   addDoc,
   serverTimestamp,
-  arrayUnion
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -35,6 +36,67 @@ export interface FirestoreUser {
   banned?: boolean;
   companyId?: string;
 }
+
+// Função helper para verificar se o usuário é colaborador (suporta array e map)
+const isUserCollaborator = (collaborators: any, userUID: string): boolean => {
+  if (!collaborators) return false;
+  
+  // Se for array
+  if (Array.isArray(collaborators)) {
+    return collaborators.includes(userUID);
+  }
+  
+  // Se for objeto/map
+  if (typeof collaborators === 'object') {
+    return collaborators.hasOwnProperty(userUID) && collaborators[userUID] === true;
+  }
+  
+  return false;
+};
+
+// Função helper para adicionar colaborador (mantém o formato existente)
+const addCollaboratorToStructure = (currentCollaborators: any, userUID: string) => {
+  // Se não existe, criar como array
+  if (!currentCollaborators) {
+    return [userUID];
+  }
+  
+  // Se for array, adicionar ao array
+  if (Array.isArray(currentCollaborators)) {
+    return currentCollaborators.includes(userUID) 
+      ? currentCollaborators 
+      : [...currentCollaborators, userUID];
+  }
+  
+  // Se for objeto/map, adicionar como propriedade
+  if (typeof currentCollaborators === 'object') {
+    return {
+      ...currentCollaborators,
+      [userUID]: true
+    };
+  }
+  
+  // Fallback: criar como array
+  return [userUID];
+};
+
+// Função helper para remover colaborador (mantém o formato existente)
+const removeCollaboratorFromStructure = (currentCollaborators: any, userUID: string) => {
+  if (!currentCollaborators) return currentCollaborators;
+  
+  // Se for array
+  if (Array.isArray(currentCollaborators)) {
+    return currentCollaborators.filter(uid => uid !== userUID);
+  }
+  
+  // Se for objeto/map
+  if (typeof currentCollaborators === 'object') {
+    const { [userUID]: removed, ...rest } = currentCollaborators;
+    return rest;
+  }
+  
+  return currentCollaborators;
+};
 
 export const firestoreService = {
   async createUser(user: FirestoreUser) {
@@ -63,9 +125,23 @@ export const firestoreService = {
 
   async getUserAgency(uid: string) {
     const agenciasRef = collection(db, 'agencias');
-    const q = query(agenciasRef, where('collaborators', 'array-contains', uid));
-    const snapshot = await getDocs(q);
-    return snapshot.empty ? null : { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    const snapshot = await getDocs(agenciasRef);
+    
+    for (const doc of snapshot.docs) {
+      const agencyData = { id: doc.id, ...doc.data() };
+      
+      // Verificar se é dono
+      if (agencyData.ownerUID === uid) {
+        return agencyData;
+      }
+      
+      // Verificar se é colaborador
+      if (isUserCollaborator(agencyData.collaborators, uid)) {
+        return agencyData;
+      }
+    }
+    
+    return null;
   },
 
   async getAllAgencies() {
@@ -76,10 +152,20 @@ export const firestoreService = {
 
   async addCollaboratorToCompany(companyId: string, collaboratorUID: string) {
     const agencyRef = doc(db, 'agencias', companyId);
+    const agencyDoc = await getDoc(agencyRef);
+    
+    if (!agencyDoc.exists()) {
+      throw new Error('Agência não encontrada');
+    }
+    
+    const currentData = agencyDoc.data();
+    const updatedCollaborators = addCollaboratorToStructure(currentData.collaborators, collaboratorUID);
+    
     await updateDoc(agencyRef, {
-      collaborators: arrayUnion(collaboratorUID),
+      collaborators: updatedCollaborators,
       updatedAt: serverTimestamp()
     });
+    
     await this.updateUserField(collaboratorUID, 'userType', 'employee');
     await this.updateUserField(collaboratorUID, 'companyId', companyId);
   },
@@ -125,13 +211,17 @@ export const firestoreService = {
   async removeCompanyMember(companyId: string, memberId: string) {
     const agencyRef = doc(db, 'agencias', companyId);
     const agencyDoc = await getDoc(agencyRef);
+    
     if (!agencyDoc.exists()) return;
-    const data = agencyDoc.data();
-    const updatedCollaborators = (data.collaborators || []).filter((uid: string) => uid !== memberId);
+    
+    const currentData = agencyDoc.data();
+    const updatedCollaborators = removeCollaboratorFromStructure(currentData.collaborators, memberId);
+    
     await updateDoc(agencyRef, {
       collaborators: updatedCollaborators,
       updatedAt: serverTimestamp()
     });
+    
     await this.updateUserField(memberId, 'userType', 'individual');
     await this.updateUserField(memberId, 'companyId', null);
   },
@@ -251,11 +341,8 @@ export const firestoreService = {
     await this.updateInviteStatus(inviteId, 'accepted');
     const agencyData = await this.getAgencyData(agencyId);
     if (agencyData) {
-      const collaborators = agencyData.collaborators || [];
-      if (!collaborators.includes(userId)) {
-        const updatedCollaborators = [...collaborators, userId];
-        await this.updateCompanyField(agencyId, 'collaborators', updatedCollaborators);
-      }
+      const updatedCollaborators = addCollaboratorToStructure(agencyData.collaborators, userId);
+      await this.updateCompanyField(agencyId, 'collaborators', updatedCollaborators);
       await this.updateUserField(userId, 'userType', 'employee');
       await this.updateUserField(userId, 'companyId', agencyId);
     }
