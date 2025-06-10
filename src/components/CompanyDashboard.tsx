@@ -239,8 +239,8 @@ const CompanyDashboard = () => {
         <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
           <Building2 className="text-purple-600" />
           {agencyData?.name || 'Sua Empresa'}
-          {isAdmin && <Shield className="h-6 w-6 text-yellow-600" title="Admin" />}
-          {isOwner && <Crown className="h-6 w-6 text-yellow-600" title="Proprietário" />}
+          {isAdmin && <Shield className="h-6 w-6 text-yellow-600" />}
+          {isOwner && <Crown className="h-6 w-6 text-yellow-600" />}
         </h2>
         <p className="text-gray-600">
           {isAdmin ? 'Gestão administrativa da empresa' : 'Gestão de equipe e colaboradores'}
