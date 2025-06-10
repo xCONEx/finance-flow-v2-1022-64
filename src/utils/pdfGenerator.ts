@@ -3,7 +3,6 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Job, WorkItem, MonthlyCost } from '../types';
 
-
 // Declaração corrigida para autoTable
 declare module 'jspdf' {
   interface jsPDF {
@@ -14,55 +13,78 @@ declare module 'jspdf' {
   }
 }
 
+// Cores do FinanceFlow
+const COLORS = {
+  primary: [79, 70, 229], // Indigo-600
+  secondary: [99, 102, 241], // Indigo-500
+  accent: [147, 51, 234], // Purple-600
+  text: [31, 41, 55], // Gray-800
+  textLight: [107, 114, 128], // Gray-500
+  success: [34, 197, 94], // Green-500
+  background: [248, 250, 252] // Gray-50
+};
 
 export const generateJobPDF = async (job: Job, userData: any) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  let contentStartY = 20;
+  const margin = 20;
+  let currentY = 25;
 
-  // Header
-  doc.setFontSize(16);
-  doc.setTextColor(33, 37, 41);
-  doc.text(`Orçamento - ${job.client || 'Cliente'}`, margin, contentStartY);
+  // Header com gradiente simulado
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 35, 'F');
+  
+  // Título principal
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont(undefined, 'bold');
+  doc.text('ORÇAMENTO', margin, 22);
 
-  // Logo ou nome da empresa no canto direito
-  if (userData?.logoBase64) {
+  // Logo premium no header se disponível
+  if (userData?.isPremium && userData?.logoBase64) {
     try {
-      const maxWidth = 30;
-      const maxHeight = 20;
-      const x = pageWidth - maxWidth - margin;
-      const y = contentStartY - 5;
-      doc.addImage(userData.logoBase64, 'PNG', x, y, maxWidth, maxHeight);
-      contentStartY += 10;
+      const logoSize = 25;
+      const logoX = pageWidth - logoSize - margin;
+      const logoY = 5;
+      doc.addImage(userData.logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
     } catch (error) {
-      console.error('Erro ao adicionar logo:', error);
-      // Fallback para nome da empresa
-      if (userData?.personalInfo?.company || userData?.company) {
-        doc.setFontSize(12);
-        doc.setTextColor(100);
-        const companyName = userData?.personalInfo?.company || userData?.company;
-        const companyWidth = doc.getTextWidth(companyName);
-        doc.text(companyName, pageWidth - companyWidth - margin, contentStartY);
-      }
-      contentStartY += 10;
+      console.log('Erro ao adicionar logo:', error);
     }
-  } else if (userData?.personalInfo?.company || userData?.company) {
-    doc.setFontSize(12);
-    doc.setTextColor(100);
-    const companyName = userData?.personalInfo?.company || userData?.company;
-    const companyWidth = doc.getTextWidth(companyName);
-    doc.text(companyName, pageWidth - companyWidth - margin, contentStartY);
-    contentStartY += 10;
   }
 
-  // Informações do job
+  currentY = 50;
+
+  // Informações do Cliente
+  doc.setFillColor(...COLORS.background);
+  doc.rect(margin, currentY, pageWidth - (margin * 2), 25, 'F');
+  
+  doc.setTextColor(...COLORS.text);
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text('INFORMAÇÕES DO CLIENTE', margin + 5, currentY + 8);
+  
   doc.setFontSize(12);
-  doc.setTextColor(55, 65, 81);
-  doc.text(`Descrição: ${job.description || 'Não informado'}`, margin, contentStartY + 10);
-  doc.text(`Data do Evento: ${new Date(job.eventDate).toLocaleDateString('pt-BR')}`, margin, contentStartY + 18);
-  doc.text(`Categoria: ${job.category || 'Não informado'}`, margin, contentStartY + 26);
-  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, contentStartY + 34);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Cliente: ${job.client || 'Não informado'}`, margin + 5, currentY + 18);
+
+  currentY += 35;
+
+  // Detalhes do Projeto
+  doc.setFillColor(...COLORS.background);
+  doc.rect(margin, currentY, pageWidth - (margin * 2), 35, 'F');
+  
+  doc.setTextColor(...COLORS.text);
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text('DETALHES DO PROJETO', margin + 5, currentY + 8);
+  
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Descrição: ${job.description || 'Não informado'}`, margin + 5, currentY + 18);
+  doc.text(`Data do Evento: ${new Date(job.eventDate).toLocaleDateString('pt-BR')}`, margin + 5, currentY + 25);
+  doc.text(`Categoria: ${job.category || 'Não informado'}`, margin + 5, currentY + 32);
+
+  currentY += 45;
 
   // Calcular valores
   const logistics = typeof job.logistics === 'number' ? job.logistics : 0;
@@ -72,8 +94,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   const desconto = (job.serviceValue * (job.discountValue || 0)) / 100;
   const valorComDesconto = job.serviceValue - desconto;
 
-  
-  // Tabela de valores
+  // Preparar dados da tabela
   const tableData = [
     ['Horas estimadas', `${job.estimatedHours || 0}h`],
     ['Logística', logistics.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
@@ -89,232 +110,305 @@ export const generateJobPDF = async (job: Job, userData: any) => {
     tableData.push(['Valor com desconto', valorComDesconto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]);
   }
 
+  // Criar tabela estilizada
   try {
     (doc as any).autoTable({
-  startY: contentStartY + 45,
-  head: [['Item', 'Valor']], // Cabeçalho
-  body: tableData,
-  theme: 'grid',
-  headStyles: {
-    fillColor: [99, 102, 241], // azul
-    textColor: 255,            // branco
-    fontSize: 12,
-  },
-  bodyStyles: {
-    fontSize: 11,
-  },
-});
+      startY: currentY,
+      head: [['Item', 'Valor']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: {
+        fillColor: COLORS.primary,
+        textColor: [255, 255, 255],
+        fontSize: 12,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: {
+        fontSize: 11,
+        textColor: COLORS.text
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      styles: {
+        lineColor: COLORS.textLight,
+        lineWidth: 0.5
+      },
+      columnStyles: {
+        0: { halign: 'left', cellWidth: 'auto' },
+        1: { halign: 'right', cellWidth: 'auto' }
+      }
+    });
 
-    // Rodapé
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    const finalY = (doc as any).lastAutoTable?.finalY || contentStartY + 200;
-    doc.text(
-      'Este orçamento é uma estimativa com base nas informações fornecidas.',
-      margin,
-      finalY + 15
-    );
+    currentY = (doc as any).lastAutoTable.finalY + 15;
   } catch (error) {
-    console.error('Erro ao gerar tabela do PDF:', error);
-    // Fallback: criar tabela manual se autoTable falhar
-    let currentY = contentStartY + 45;
+    console.error('Erro ao gerar tabela:', error);
+    // Fallback manual se autoTable falhar
     doc.setFontSize(12);
-    doc.setTextColor(0);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...COLORS.text);
+    doc.text('RESUMO FINANCEIRO', margin, currentY);
+    
+    currentY += 10;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(11);
     
     tableData.forEach((row, index) => {
       doc.text(row[0], margin, currentY + (index * 8));
-      doc.text(row[1], margin + 100, currentY + (index * 8));
+      doc.text(row[1], pageWidth - margin - 50, currentY + (index * 8));
     });
+    
+    currentY += (tableData.length * 8) + 15;
   }
 
+  // Rodapé elegante
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, currentY, pageWidth, 25, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.text('Este orçamento é uma estimativa baseada nas informações fornecidas.', margin, currentY + 10);
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} - FinanceFlow`, margin, currentY + 18);
+
+  // Salvar o PDF
   doc.save(`Orcamento_${job.client?.replace(/\s+/g, '_') || 'Cliente'}_${job.description?.replace(/\s+/g, '_') || 'Job'}.pdf`);
 };
 
 export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any) => {
   const doc = new jsPDF();
-  const title = 'Relatório de Itens de Trabalho';
-  const date = new Date().toLocaleDateString('pt-BR');
-
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  let contentStartY = 20;
+  const margin = 20;
+  let currentY = 25;
 
-  // Logo se disponível
-  if (userData?.logoBase64) {
+  // Header com estilo
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 35, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('RELATÓRIO DE ITENS DE TRABALHO', margin, 22);
+
+  // Logo premium se disponível
+  if (userData?.isPremium && userData?.logoBase64) {
     try {
-      const maxWidth = 40;
-      const maxHeight = 20;
-      const x = pageWidth - maxWidth - margin;
-      const y = contentStartY;
-
-      doc.addImage(userData.logoBase64, 'PNG', x, y, maxWidth, maxHeight);
-      contentStartY = y + maxHeight + 10;
+      const logoSize = 25;
+      const logoX = pageWidth - logoSize - margin;
+      const logoY = 5;
+      doc.addImage(userData.logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
     } catch (error) {
-      console.error('Erro ao adicionar logo:', error);
+      console.log('Erro ao adicionar logo:', error);
     }
   }
 
-  // Título
-  doc.setFontSize(18);
-  doc.setTextColor(33, 37, 41);
-  doc.text(title, margin, contentStartY);
+  currentY = 55;
 
-  // Info
+  // Informações gerais
+  doc.setTextColor(...COLORS.text);
   doc.setFontSize(12);
-  doc.setTextColor(55, 65, 81);
-  doc.text(`Gerado em: ${date}`, margin, contentStartY + 10);
-  doc.text(`Total de itens: ${workItems.length}`, margin, contentStartY + 18);
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, currentY);
+  doc.text(`Total de itens: ${workItems.length}`, margin, currentY + 8);
 
-  // Tabela
-  const tableData = workItems.map(item => [
-    item.description,
-    item.category,
-    item.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-    new Date().toLocaleDateString('pt-BR')
-  ]);
+  currentY += 25;
 
-  const totalValue = workItems.reduce((sum, item) => sum + item.value, 0);
+  // Agrupar por categoria
+  const itemsByCategory = workItems.reduce((acc, item) => {
+    const category = item.category || 'Sem Categoria';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(item);
+    return acc;
+  }, {} as Record<string, WorkItem[]>);
 
-  try {
-    (doc as any).autoTable({
-      startY: contentStartY + 30,
-      head: [['Descrição', 'Categoria', 'Valor', 'Data']],
-      body: [
-        ...tableData,
-        ['TOTAL', '', totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), '']
-      ],
-      theme: 'grid',
-      headStyles: {
-        fillColor: [99, 102, 241],
-        textColor: 255,
-        fontSize: 12,
-      },
-      bodyStyles: {
-        fontSize: 10,
-      },
-    });
-  } catch (error) {
-    console.error('Erro ao gerar tabela:', error);
-    // Fallback manual
-    let currentY = contentStartY + 40;
-    doc.setFontSize(10);
-    tableData.forEach((row, index) => {
-      row.forEach((cell, cellIndex) => {
-        doc.text(cell, margin + (cellIndex * 45), currentY + (index * 8));
+  // Criar tabela por categoria
+  Object.entries(itemsByCategory).forEach(([category, items]) => {
+    // Cabeçalho da categoria
+    doc.setFillColor(...COLORS.secondary);
+    doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text(category.toUpperCase(), margin + 5, currentY + 6);
+
+    currentY += 15;
+
+    const categoryData = items.map(item => [
+      item.description,
+      item.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    ]);
+
+    const categoryTotal = items.reduce((sum, item) => sum + item.value, 0);
+
+    try {
+      (doc as any).autoTable({
+        startY: currentY,
+        head: [['Descrição', 'Valor']],
+        body: [
+          ...categoryData,
+          ['SUBTOTAL', categoryTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]
+        ],
+        theme: 'striped',
+        headStyles: {
+          fillColor: COLORS.accent,
+          textColor: [255, 255, 255],
+          fontSize: 11
+        },
+        bodyStyles: {
+          fontSize: 10,
+          textColor: COLORS.text
+        },
+        styles: {
+          lineColor: COLORS.textLight,
+          lineWidth: 0.3
+        }
       });
-    });
-  }
 
-  doc.save(`itens_trabalho_${date.replace(/\//g, '_')}.pdf`);
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+    } catch (error) {
+      console.error('Erro ao gerar tabela da categoria:', error);
+      // Fallback manual
+      categoryData.forEach((row, index) => {
+        doc.setTextColor(...COLORS.text);
+        doc.setFontSize(10);
+        doc.text(row[0], margin, currentY + (index * 6));
+        doc.text(row[1], pageWidth - margin - 40, currentY + (index * 6));
+      });
+      currentY += (categoryData.length * 6) + 15;
+    }
+  });
+
+  // Total geral
+  const totalValue = workItems.reduce((sum, item) => sum + item.value, 0);
+  
+  doc.setFillColor(...COLORS.success);
+  doc.rect(margin, currentY, pageWidth - (margin * 2), 12, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text('TOTAL GERAL:', margin + 5, currentY + 8);
+  doc.text(totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), pageWidth - margin - 50, currentY + 8);
+
+  doc.save(`itens_trabalho_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '_')}.pdf`);
 };
 
 export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any) => {
-  console.log('🔄 Iniciando geração de PDF de despesas...');
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  let currentY = 25;
+
+  // Header estilizado
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 35, 'F');
   
-  try {
-    const doc = new jsPDF();
-    const title = 'Relatório de Despesas Mensais';
-    const date = new Date().toLocaleDateString('pt-BR');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('RELATÓRIO DE DESPESAS MENSAIS', margin, 22);
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 14;
-    let contentStartY = 20;
-
-    // Logo se disponível
-    if (userData?.logoBase64) {
-      try {
-        const maxWidth = 40;
-        const maxHeight = 20;
-        const x = pageWidth - maxWidth - margin;
-        const y = contentStartY;
-
-        doc.addImage(userData.logoBase64, 'PNG', x, y, maxWidth, maxHeight);
-        contentStartY = y + maxHeight + 10;
-      } catch (error) {
-        console.error('Erro ao adicionar logo:', error);
-      }
+  // Logo premium se disponível
+  if (userData?.isPremium && userData?.logoBase64) {
+    try {
+      const logoSize = 25;
+      const logoX = pageWidth - logoSize - margin;
+      const logoY = 5;
+      doc.addImage(userData.logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
+    } catch (error) {
+      console.log('Erro ao adicionar logo:', error);
     }
+  }
 
-    // Título
-    doc.setFontSize(18);
-    doc.setTextColor(33, 37, 41);
-    doc.text(title, margin, contentStartY);
+  currentY = 55;
 
-    // Info
+  // Informações gerais
+  doc.setTextColor(...COLORS.text);
+  doc.setFontSize(12);
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, currentY);
+  doc.text(`Total de despesas: ${expenses.length}`, margin, currentY + 8);
+
+  currentY += 25;
+
+  // Agrupar por categoria
+  const expensesByCategory = expenses.reduce((acc, expense) => {
+    const category = expense.category || 'Sem Categoria';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(expense);
+    return acc;
+  }, {} as Record<string, MonthlyCost[]>);
+
+  // Criar tabela por categoria
+  Object.entries(expensesByCategory).forEach(([category, items]) => {
+    // Cabeçalho da categoria
+    doc.setFillColor(...COLORS.secondary);
+    doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
+    
+    doc.setTextColor(255, 255, 255);
     doc.setFontSize(12);
-    doc.setTextColor(55, 65, 81);
-    doc.text(`Gerado em: ${date}`, margin, contentStartY + 10);
-    doc.text(`Total de despesas: ${expenses.length}`, margin, contentStartY + 18);
+    doc.setFont(undefined, 'bold');
+    doc.text(category.toUpperCase(), margin + 5, currentY + 6);
 
-    // Preparar dados da tabela
-    const tableData = expenses.map(expense => [
+    currentY += 15;
+
+    const categoryData = items.map(expense => [
       expense.description || 'Sem descrição',
-      expense.category || 'Sem categoria',
       expense.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
       new Date(expense.month + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     ]);
 
-    const totalValue = expenses.reduce((sum, expense) => sum + (expense.value || 0), 0);
+    const categoryTotal = items.reduce((sum, expense) => sum + expense.value, 0);
 
-    // Adicionar linha de total
-    tableData.push([
-      'TOTAL',
-      '',
-      totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-      ''
-    ]);
-
-    // Tentar usar autoTable, com fallback manual
     try {
-      console.log('📊 Tentando gerar tabela com autoTable...');
       (doc as any).autoTable({
-        startY: contentStartY + 30,
-        head: [['Descrição', 'Categoria', 'Valor', 'Mês']],
-        body: tableData,
-        theme: 'grid',
+        startY: currentY,
+        head: [['Descrição', 'Valor', 'Mês']],
+        body: [
+          ...categoryData,
+          ['SUBTOTAL', categoryTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), '']
+        ],
+        theme: 'striped',
         headStyles: {
-          fillColor: [99, 102, 241],
-          textColor: 255,
-          fontSize: 12,
+          fillColor: COLORS.accent,
+          textColor: [255, 255, 255],
+          fontSize: 11
         },
         bodyStyles: {
           fontSize: 10,
+          textColor: COLORS.text
         },
+        styles: {
+          lineColor: COLORS.textLight,
+          lineWidth: 0.3
+        }
       });
-      console.log('✅ Tabela criada com autoTable');
-    } catch (autoTableError) {
-      console.error('❌ Erro com autoTable, usando fallback manual:', autoTableError);
-      
-      // Fallback: criar tabela manual
-      let currentY = contentStartY + 40;
-      doc.setFontSize(11);
-      doc.setTextColor(0);
-      
-      // Cabeçalho
-      doc.setFont(undefined, 'bold');
-      doc.text('Descrição', margin, currentY);
-      doc.text('Categoria', margin + 60, currentY);
-      doc.text('Valor', margin + 120, currentY);
-      doc.text('Mês', margin + 170, currentY);
-      
-      currentY += 10;
-      doc.setFont(undefined, 'normal');
-      
-      // Dados
-      tableData.forEach((row, index) => {
-        doc.text(row[0].substring(0, 25), margin, currentY + (index * 8));
-        doc.text(row[1].substring(0, 15), margin + 60, currentY + (index * 8));
-        doc.text(row[2], margin + 120, currentY + (index * 8));
-        doc.text(row[3].substring(0, 15), margin + 170, currentY + (index * 8));
-      });
-    }
 
-    console.log('💾 Salvando PDF...');
-    doc.save(`despesas_mensais_${date.replace(/\//g, '_')}.pdf`);
-    console.log('✅ PDF de despesas gerado com sucesso!');
-    
-  } catch (error) {
-    console.error('❌ Erro geral ao gerar PDF de despesas:', error);
-    throw new Error('Falha ao gerar PDF de despesas: ' + error.message);
-  }
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+    } catch (error) {
+      console.error('Erro ao gerar tabela da categoria:', error);
+      // Fallback manual
+      categoryData.forEach((row, index) => {
+        doc.setTextColor(...COLORS.text);
+        doc.setFontSize(10);
+        doc.text(row[0].substring(0, 30), margin, currentY + (index * 6));
+        doc.text(row[1], margin + 80, currentY + (index * 6));
+        doc.text(row[2].substring(0, 15), margin + 130, currentY + (index * 6));
+      });
+      currentY += (categoryData.length * 6) + 15;
+    }
+  });
+
+  // Total geral
+  const totalValue = expenses.reduce((sum, expense) => sum + expense.value, 0);
+  
+  doc.setFillColor(...COLORS.success);
+  doc.rect(margin, currentY, pageWidth - (margin * 2), 12, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text('TOTAL GERAL:', margin + 5, currentY + 8);
+  doc.text(totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), pageWidth - margin - 50, currentY + 8);
+
+  doc.save(`despesas_mensais_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '_')}.pdf`);
 };

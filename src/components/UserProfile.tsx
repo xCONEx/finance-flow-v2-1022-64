@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Save, Upload } from 'lucide-react';
+import { User, Save, Upload, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,9 +14,11 @@ const UserProfile = () => {
   const { user, logout, userData, agencyData } = useAuth();
   const { currentTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [logoHover, setLogoHover] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -154,6 +155,99 @@ const UserProfile = () => {
     }
   };
 
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    // Verificar se é usuário premium
+    if (!userData?.isPremium) {
+      toast({
+        title: "Recurso Premium",
+        description: "Upload de logo é exclusivo para usuários premium.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Verificar tamanho do arquivo (max 3MB)
+    if (file.size > 3 * 1024 * 1024) {
+      toast({
+        title: "Erro",
+        description: "A logo deve ter no máximo 3MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Verificar tipo do arquivo
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione uma imagem válida.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Converter para base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        
+        try {
+          // Salvar no Firebase como logoBase64
+          await firestoreService.updateUserField(user.id, 'logoBase64', base64);
+          
+          toast({
+            title: "Logo Atualizada",
+            description: "Sua logo da empresa foi atualizada com sucesso.",
+          });
+        } catch (error) {
+          console.error('Erro ao salvar logo:', error);
+          toast({
+            title: "Erro",
+            description: "Erro ao salvar logo.",
+            variant: "destructive"
+          });
+        }
+        setIsLoading(false);
+      };
+      
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Erro ao processar logo:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao processar logo.",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    if (!user?.id) return;
+
+    setIsLoading(true);
+    try {
+      await firestoreService.updateUserField(user.id, 'logoBase64', '');
+      toast({
+        title: "Logo Removida",
+        description: "Logo da empresa foi removida com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao remover logo:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao remover logo.",
+        variant: "destructive"
+      });
+    }
+    setIsLoading(false);
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -263,20 +357,6 @@ const UserProfile = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone</Label>
-                  {isEditing ? (
-                    <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => handleInputChange('phone', e.target.value)}
-                      placeholder="(11) 99999-9999"
-                    />
-                  ) : (
-                    <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.phone || 'Não informado'}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="company">Empresa</Label>
                   {isInCompany ? (
                     <div className="space-y-1">
@@ -298,16 +378,82 @@ const UserProfile = () => {
                     )
                   )}
                 </div>
+
+                <div className="space-y-2">
+                  <Label>Tipo de Usuário</Label>
+                  <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
+                    {user?.userType === 'admin' && 'Administrador do Sistema'}
+                    {user?.userType === 'company_owner' && 'Dono da Empresa'}
+                    {user?.userType === 'employee' && 'Colaborador'}
+                    {user?.userType === 'individual' && 'Usuário Individual'}
+                  </p>
+                </div>
               </div>
 
+              {/* Logo da Empresa - apenas para usuários premium */}
+              {userData?.isPremium && isEditing && (
+                <div className="space-y-2">
+                  <Label>Logo da Empresa</Label>
+                  {userData?.logoBase64 ? (
+                    <div 
+                      className="relative inline-block"
+                      onMouseEnter={() => setLogoHover(true)}
+                      onMouseLeave={() => setLogoHover(false)}
+                    >
+                      <img 
+                        src={userData.logoBase64} 
+                        alt="Logo da empresa" 
+                        className="h-20 w-auto border rounded-lg"
+                      />
+                      {logoHover && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={handleDeleteLogo}
+                            disabled={isLoading}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isLoading}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        {isLoading ? 'Salvando...' : 'Adicionar Logo'}
+                      </Button>
+                      <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label>Tipo de Usuário</Label>
-                <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
-                  {user?.userType === 'admin' && 'Administrador do Sistema'}
-                  {user?.userType === 'company_owner' && 'Dono da Empresa'}
-                  {user?.userType === 'employee' && 'Colaborador'}
-                  {user?.userType === 'individual' && 'Usuário Individual'}
-                </p>
+                <Label htmlFor="phone">Telefone</Label>
+                {isEditing ? (
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    placeholder="(11) 99999-9999"
+                  />
+                ) : (
+                  <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.phone || 'Não informado'}</p>
+                )}
               </div>
             </div>
 
