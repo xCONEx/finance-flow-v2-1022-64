@@ -426,56 +426,59 @@ const UserProfile = () => {
                   </div>
 
                   {/* Logo da Empresa - apenas para usuários premium */}
-                  {isPremium && isEditing && (
-                    <div className="space-y-2">
-                      <Label>Logo</Label>
-                      {userData?.logobase64 ? (
-                        <div 
-                          className="relative inline-block"
-                          onMouseEnter={() => setLogoHover(true)}
-                          onMouseLeave={() => setLogoHover(false)}
-                        >
-                          <img 
-                            src={userData.logobase64} 
-                            alt="Logo da empresa" 
-                            className="h-20 w-auto border rounded-lg"
-                          />
-                          {logoHover && (
-                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={handleDeleteLogo}
-                                disabled={isLoading}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <input
-                            ref={logoInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleLogoUpload}
-                            className="hidden"
-                          />
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => logoInputRef.current?.click()}
-                            disabled={isLoading}
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            {isLoading ? 'Salvando...' : 'Adicionar Logo'}
-                          </Button>
-                          <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+{isPremium && isEditing && (
+  <div className="space-y-2">
+    <Label>Logo da Empresa</Label>
+
+    {userData?.logobase64 ? (
+      <div 
+        className="relative w-fit"
+        onMouseEnter={() => setLogoHover(true)}
+        onMouseLeave={() => setLogoHover(false)}
+      >
+        <img 
+          src={userData.logobase64} 
+          alt="Logo da empresa" 
+          className="h-20 w-auto border rounded-lg"
+        />
+
+        {logoHover && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg z-10">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDeleteLogo}
+              disabled={isLoading}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    ) : (
+      <div className="space-y-2">
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleLogoUpload}
+          className="hidden"
+        />
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => logoInputRef.current?.click()}
+          disabled={isLoading}
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          {isLoading ? 'Salvando...' : 'Adicionar Logo'}
+        </Button>
+        <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
+      </div>
+    )}
+  </div>
+)}
+
                 </div>
               </div>
             </div>
