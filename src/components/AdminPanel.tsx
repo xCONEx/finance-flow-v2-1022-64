@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -311,7 +312,7 @@ const AdminPanel = () => {
         </Badge>
       </div>
 
-      {/* Estatísticas Gerais - ADICIONADAS métricas por plano */}
+      {/* Estatísticas Gerais */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -346,7 +347,7 @@ const AdminPanel = () => {
         </Card>
       </div>
 
-      {/* NOVA seção: Métricas por Plano */}
+      {/* Métricas por Plano */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
