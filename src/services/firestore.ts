@@ -10,7 +10,8 @@ import {
   where,
   addDoc,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  arrayUnion
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -135,6 +136,27 @@ export const firestoreService = {
     }
   },
 
+  async addCollaboratorToCompany(companyId: string, collaboratorUID: string) {
+    try {
+      console.log('👥 Adicionando colaborador à empresa:', { companyId, collaboratorUID });
+      const agencyRef = doc(db, 'agencias', companyId);
+      
+      await updateDoc(agencyRef, {
+        collaborators: arrayUnion(collaboratorUID),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Atualizar o tipo do usuário para employee
+      await this.updateUserField(collaboratorUID, 'userType', 'employee');
+      await this.updateUserField(collaboratorUID, 'companyId', companyId);
+      
+      console.log('✅ Colaborador adicionado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao adicionar colaborador:', error);
+      throw error;
+    }
+  },
+
   async saveKanbanBoard(agencyId: string, boardData: any) {
     try {
       console.log('💾 Salvando board do Kanban para agência:', agencyId);
@@ -233,6 +255,10 @@ export const firestoreService = {
           collaborators: updatedCollaborators,
           updatedAt: serverTimestamp()
         });
+        
+        // Reverter o tipo do usuário para individual
+        await this.updateUserField(memberId, 'userType', 'individual');
+        await this.updateUserField(memberId, 'companyId', null);
         
         console.log('✅ Membro removido com sucesso');
       }

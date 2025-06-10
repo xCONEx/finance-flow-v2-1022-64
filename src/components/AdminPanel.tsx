@@ -41,6 +41,8 @@ const AdminPanel = () => {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [editingCompany, setEditingCompany] = useState(null);
   const [showCompanyMembers, setShowCompanyMembers] = useState({});
+  const [newCollaboratorEmail, setNewCollaboratorEmail] = useState('');
+  const [addingCollaboratorTo, setAddingCollaboratorTo] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -174,7 +176,7 @@ const AdminPanel = () => {
 
       const companyData = {
         name: newCompanyName,
-        ownerUID: owner.id,
+        ownerUID: owner.uid || owner.id,
         collaborators: [],
         equipments: [],
         expenses: [],
@@ -184,8 +186,8 @@ const AdminPanel = () => {
       
       const companyId = await firestoreService.createCompany(companyData);
       
-      await firestoreService.updateUserField(owner.id, 'userType', 'company_owner');
-      await firestoreService.updateUserField(owner.id, 'companyId', companyId);
+      await firestoreService.updateUserField(owner.uid || owner.id, 'userType', 'company_owner');
+      await firestoreService.updateUserField(owner.uid || owner.id, 'companyId', companyId);
       
       setNewCompanyName('');
       setNewCompanyOwnerEmail('');
@@ -255,6 +257,57 @@ const AdminPanel = () => {
     }
   };
 
+  const handleAddCollaborator = async () => {
+    if (!newCollaboratorEmail || !addingCollaboratorTo) {
+      toast({
+        title: "Erro",
+        description: "Preencha o email do colaborador",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      console.log('Adicionando colaborador:', newCollaboratorEmail, 'à empresa:', addingCollaboratorTo);
+      
+      const user = users.find(u => u.email === newCollaboratorEmail);
+      if (!user) {
+        toast({
+          title: "Erro",
+          description: "Usuário não encontrado",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      await firestoreService.addCollaboratorToCompany(addingCollaboratorTo, user.uid || user.id);
+      
+      // Atualizar o estado local
+      setCompanies(companies.map(company => {
+        if (company.id === addingCollaboratorTo) {
+          const updatedCollaborators = [...(company.collaborators || []), user.uid || user.id];
+          return { ...company, collaborators: updatedCollaborators };
+        }
+        return company;
+      }));
+      
+      setNewCollaboratorEmail('');
+      setAddingCollaboratorTo(null);
+      
+      toast({
+        title: "Sucesso",
+        description: "Colaborador adicionado com sucesso"
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar colaborador:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar colaborador",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleRemoveCollaborator = async (companyId, collaboratorUID) => {
     try {
       console.log('Removendo colaborador:', companyId, collaboratorUID);
@@ -308,7 +361,7 @@ const AdminPanel = () => {
         return;
       }
       
-      await firestoreService.updateUserField(user.id, 'userType', 'admin');
+      await firestoreService.updateUserField(user.uid || user.id, 'userType', 'admin');
       
       toast({
         title: "Sucesso",
@@ -365,7 +418,6 @@ const AdminPanel = () => {
         <p className="text-gray-600">Gestão completa da plataforma FinanceFlow</p>
       </div>
 
-      {/* Estatísticas Gerais */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -400,7 +452,6 @@ const AdminPanel = () => {
         </Card>
       </div>
 
-      {/* Métricas por Plano */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -446,7 +497,7 @@ const AdminPanel = () => {
                   <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <h4 className="font-medium">{user.email}</h4>
-                      <p className="text-sm text-gray-600">UID: {user.uid}</p>
+                      <p className="text-sm text-gray-600">UID: {user.uid || user.id}</p>
                       {user.personalInfo?.phone && (
                         <p className="text-sm text-gray-500">📞 {user.personalInfo.phone}</p>
                       )}
@@ -460,7 +511,7 @@ const AdminPanel = () => {
                     </div>
                     
                     <div className="flex gap-2 flex-wrap">
-                      <Select onValueChange={(value) => handleUpdateSubscription(user.id, value)}>
+                      <Select onValueChange={(value) => handleUpdateSubscription(user.uid || user.id, value)}>
                         <SelectTrigger className="w-32">
                           <SelectValue placeholder="Plano" />
                         </SelectTrigger>
@@ -471,7 +522,7 @@ const AdminPanel = () => {
                         </SelectContent>
                       </Select>
                       
-                      <Select onValueChange={(value) => handleUpdateUserType(user.id, value)}>
+                      <Select onValueChange={(value) => handleUpdateUserType(user.uid || user.id, value)}>
                         <SelectTrigger className="w-40">
                           <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
@@ -484,7 +535,7 @@ const AdminPanel = () => {
                       <Button
                         variant={user.banned ? "outline" : "destructive"}
                         size="sm"
-                        onClick={() => handleBanUser(user.id, !user.banned)}
+                        onClick={() => handleBanUser(user.uid || user.id, !user.banned)}
                       >
                         {user.banned ? "Desbanir" : "Banir"}
                       </Button>
@@ -552,6 +603,35 @@ const AdminPanel = () => {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <UserPlus className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Adicionar Colaborador</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div>
+                                <Label>Email do Colaborador</Label>
+                                <Input
+                                  value={newCollaboratorEmail}
+                                  onChange={(e) => {
+                                    setNewCollaboratorEmail(e.target.value);
+                                    setAddingCollaboratorTo(company.id);
+                                  }}
+                                  placeholder="Digite o email do colaborador"
+                                />
+                              </div>
+                              <Button onClick={handleAddCollaborator} className="w-full">
+                                Adicionar Colaborador
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button variant="outline" size="sm">
@@ -669,7 +749,6 @@ const AdminPanel = () => {
         <TabsContent value="analytics" className="space-y-4">
           {analytics && (
             <>
-              {/* KPIs Principais */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                   <CardHeader>
@@ -708,7 +787,6 @@ const AdminPanel = () => {
                 </Card>
               </div>
 
-              {/* Estatísticas por Tipo de Usuário */}
               <Card>
                 <CardHeader>
                   <CardTitle>Distribuição de Usuários</CardTitle>
@@ -735,7 +813,6 @@ const AdminPanel = () => {
                 </CardContent>
               </Card>
 
-              {/* Estatísticas de Negócio */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
