@@ -55,7 +55,7 @@ const AdminPanel = () => {
       const [usersData, companiesData, analyticsData] = await Promise.all([
         firestoreService.getAllUsers(),
         firestoreService.getAllCompanies(),
-        firestoreService.getAnalyticsData() // CORRIGIDO: método correto
+        firestoreService.getAnalyticsData()
       ]);
       
       setUsers(usersData);
@@ -173,8 +173,8 @@ const AdminPanel = () => {
 
       const companyData = {
         name: newCompanyName,
-        ownerUid: owner.id, // CORRIGIDO: usar ownerUid
-        collaborators: [{ uid: owner.id, email: owner.email, role: 'owner' }],
+        ownerUID: owner.id,
+        colaboradores: [{ uid: owner.id, email: owner.email, role: 'owner' }],
         equipments: [],
         expenses: [],
         jobs: [],
@@ -204,9 +204,11 @@ const AdminPanel = () => {
     }
   };
 
+  // CORRIGIDO: Função para editar empresa agora usa o método correto
   const handleEditCompany = async (companyId, newData) => {
     try {
       console.log('Editando empresa:', companyId, newData);
+      // Usar o método correto para atualizar empresa, não usuário
       await firestoreService.updateCompanyField(companyId, 'name', newData.name);
       
       setCompanies(companies.map(company => 
@@ -484,10 +486,10 @@ const AdminPanel = () => {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <h4 className="font-medium text-lg">{company.name}</h4>
-                        <p className="text-sm text-gray-600">Owner UID: {company.ownerUid}</p>
+                        <p className="text-sm text-gray-600">Owner UID: {company.ownerUID}</p>
                         <div className="flex gap-2 mt-2">
                           <Badge variant="outline">{company.plan || 'premium'}</Badge>
-                          <Badge variant="secondary">{company.collaborators?.length || 0} membros</Badge>
+                          <Badge variant="secondary">{company.colaboradores?.length || 0} membros</Badge>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -532,7 +534,7 @@ const AdminPanel = () => {
                     {showCompanyMembers[company.id] && (
                       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                         <h5 className="font-medium mb-2">Membros da Equipe:</h5>
-                        {company.collaborators?.map((member, index) => (
+                        {company.colaboradores?.map((member, index) => (
                           <div key={index} className="flex justify-between items-center py-1">
                             <span className="text-sm">{member.email}</span>
                             <Badge variant="outline">{member.role}</Badge>

@@ -6,25 +6,26 @@ import { DollarSign, Calculator, TrendingUp, Users, CheckCircle, Clock, Plus, Tr
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePrivacy } from '../contexts/PrivacyContext';
-import { useApp } from '../contexts/AppContext';
+import { useAppContext } from '../contexts/AppContext';
 import CostDistributionChart from './CostDistributionChart';
 import RecentJobs from './RecentJobs';
 import TaskList from './TaskList';
 import AddTaskModal from './AddTaskModal';
 import InviteAcceptance from './InviteAcceptance';
 import ManualValueModal from '@/components/ManualValueModal';
-import ExpenseModal from '@/components/ExpenseModal';
+import ExpenseModal from '@/components/ExpenseModal'; // ajuste o caminho se necessário
+
 
 const Dashboard = () => {
-  const { user, userData, companyData } = useAuth();
+  const { user, userData, agencyData } = useAuth();
   const { currentTheme } = useTheme();
   const { formatValue } = usePrivacy();
-  const { jobs, monthlyCosts, workItems, workRoutine, tasks, addMonthlyCost } = useApp();
+  const { jobs, monthlyCosts, workItems, workRoutine, tasks, addMonthlyCost } = useAppContext();
   const [showTaskModal, setShowTaskModal] = useState(false);
 
   // CORRIGIDO: Dashboard sempre usa dados pessoais do usuário
   // Apenas Kanban e Equipe são compartilhados com a empresa
-  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'company_colab') && !!companyData;
+  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
   
   // Dashboard sempre mostra dados pessoais
   const currentData = userData;
@@ -90,14 +91,11 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
   ];
 
   const handleQuickAddCost = () => {
-    if (!user?.id) return;
-    
     addMonthlyCost({
       description: 'Novo Custo',
       category: 'Geral',
       value: 0,
-      month: new Date().toISOString().slice(0, 7),
-      userId: user.id
+      month: new Date().toISOString().slice(0, 7)
     });
   };
 
@@ -140,7 +138,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
             <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
               <Building2 className="h-5 w-5" />
               <p className="text-sm">
-                <strong>Empresa:</strong> {companyData.name} | 
+                <strong>Empresa:</strong> {agencyData.name} | 
                 <span className="ml-2">Este dashboard mostra seus dados pessoais.</span>
               </p>
             </div>
@@ -230,7 +228,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
   <CardContent className="space-y-3">
     <Button
       className={`w-full bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 transition-all duration-300 hover:scale-105`}
-      onClick={() => setShowManualModal(true)}
+      onClick={() => setShowManualModal(true)} // ✅ Abre ManualValueModal
     >
       <Calculator className="mr-2 h-4 w-4" />
       Adicionar Valor Manual
@@ -239,7 +237,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
     <Button
       variant="outline"
       className="w-full transition-all duration-300 hover:scale-105"
-      onClick={() => setShowExpenseModal(true)}
+      onClick={() => setShowExpenseModal(true)} // ✅ Abre ExpenseModal
     >
       <DollarSign className="mr-2 h-4 w-4" />
       Adicionar Custo

@@ -14,7 +14,7 @@ interface NavigationProps {
 }
 
 const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
-  const { user, companyData } = useAuth();
+  const { user, agencyData } = useAuth();
   const { currentTheme } = useTheme();
   const { valuesHidden, toggleValuesVisibility } = usePrivacy();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -33,7 +33,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
     { id: 'team', label: 'Equipe', icon: Users }
   ];
 
-  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'company_colab') && !!companyData;
+  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
   const isAdmin = user?.userType === 'admin';
 
   const handleTabChange = (tab: string) => {
@@ -68,7 +68,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
                   <SheetContent side="left" className="w-64">
                     <div className="space-y-4 py-4">
                       <h3 className="font-semibold text-lg">Menu Empresa</h3>
-                      <p className="text-sm text-gray-600">{companyData?.name || 'Sua Empresa'}</p>
+                      <p className="text-sm text-gray-600">{agencyData?.name || 'Sua Empresa'}</p>
                       {companyTabs.map((tab) => (
                         <Button
                           key={tab.id}
@@ -129,6 +129,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
                 variant="ghost"
                 size="sm"
                 onClick={toggleValuesVisibility}
+                title={valuesHidden ? "Mostrar valores" : "Ocultar valores"}
               >
                 {valuesHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
@@ -169,7 +170,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
                     {isCompanyUser && (
                       <>
                         <h3 className="font-semibold text-lg">Menu Empresa</h3>
-                        <p className="text-sm text-gray-600">{companyData?.name || 'Sua Empresa'}</p>
+                        <p className="text-sm text-gray-600">{agencyData?.name || 'Sua Empresa'}</p>
                         {companyTabs.map((tab) => (
                           <Button
                             key={tab.id}
@@ -212,6 +213,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
               variant="ghost"
               size="sm"
               onClick={toggleValuesVisibility}
+              title={valuesHidden ? "Mostrar valores" : "Ocultar valores"}
             >
               {valuesHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>

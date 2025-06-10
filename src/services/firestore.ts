@@ -1,361 +1,457 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, addDoc, deleteDoc } from 'firebase/firestore';
-
-const firebaseConfig = {
-  // Adicione sua configuração do Firebase aqui
-    apiKey: "AIzaSyAIO4Qo-kuobCIpRh-XTye5Fs_-9uZmzlY",
-    authDomain: "financeflow-e0fae.firebaseapp.com",
-    projectId: "financeflow-e0fae",
-    storageBucket: "financeflow-e0fae.firebasestorage.app",
-    messagingSenderId: "970984329138",
-    appId: "1:970984329138:web:429a185b8bab1971991eab"
-};
-
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export default app;
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  getDocs, 
+  query, 
+  where,
+  addDoc,
+  serverTimestamp,
+  writeBatch
+} from 'firebase/firestore';
+import { db } from './firebase';
 
 export interface FirestoreUser {
   uid: string;
   email: string;
   name?: string;
-  photoURL?: string;
-  logobase64: string;
-  equipments: any[];
-  expenses: any[];
-  jobs: any[];
-  routine: {
-    dailyHours: number;
-    dalilyValue: number;
-    desiredSalary: number;
-    workDays: number;
-    valuePerHour?: number;
-  };
-  userType: 'individual' | 'company_owner' | 'company_colab' | 'admin';
   phone?: string;
   company?: string;
-  imageuser?: string;
+  logobase64?: string;
+  equipments?: any[];
+  expenses?: any[];
+  jobs?: any[];
+  routine?: any;
   personalInfo?: {
     phone?: string;
     company?: string;
   };
-  subscription?: string | {
-    plan: string;
-    status: string;
-  };
+  imageuser?: string;
+  userType?: 'individual' | 'company_owner' | 'employee' | 'admin';
+  subscription?: 'free' | 'premium' | 'enterprise';
   banned?: boolean;
-  createdAt?: string;
+  companyId?: string;
 }
 
 export const firestoreService = {
-  async getUserData(uid: string): Promise<FirestoreUser> {
+  async createUser(user: FirestoreUser) {
     try {
-      const userDocRef = doc(db, 'usuarios', uid);
-      const userDocSnap = await getDoc(userDocRef);
+      console.log('Criando usuário:', user.uid);
+      const userRef = doc(db, 'usuarios', user.uid);
+      await setDoc(userRef, user);
+      console.log('Usuário criado com sucesso');
+    } catch (error) {
+      console.error('Erro ao criar usuário:', error);
+      throw error;
+    }
+  },
 
-      if (userDocSnap.exists()) {
-        return userDocSnap.data() as FirestoreUser;
+  async getUserData(uid: string) {
+    try {
+      console.log('Buscando dados do usuário:', uid);
+      const userRef = doc(db, 'usuarios', uid);
+      const userDoc = await getDoc(userRef);
+
+      if (userDoc.exists()) {
+        console.log('Dados do usuário encontrados');
+        return userDoc.data() as FirestoreUser;
       } else {
-        console.log("No such document!");
-        return {
-          uid: '',
-          email: '',
-          logobase64: '',
-          equipments: [],
-          expenses: [],
-          jobs: [],
-          routine: {
-            dailyHours: 8,
-            dalilyValue: 0,
-            desiredSalary: 0,
-            workDays: 22
-          },
-          userType: 'individual'
-        };
+        console.log('Usuário não encontrado');
+        return null;
       }
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      console.error('Erro ao buscar dados do usuário:', error);
       throw error;
     }
   },
 
-  async createUser(userData: FirestoreUser): Promise<void> {
+  async updateUserField(uid: string, field: string, value: any) {
     try {
-      const userDocRef = doc(db, 'usuarios', userData.uid);
-      await setDoc(userDocRef, userData);
-      console.log("Document written with ID: ", userData.uid);
+      console.log(`Atualizando campo ${field} do usuário ${uid}`);
+      const userRef = doc(db, 'usuarios', uid);
+      await updateDoc(userRef, {
+        [field]: value,
+        updatedAt: serverTimestamp()
+      });
+      console.log('Campo atualizado com sucesso');
     } catch (error) {
-      console.error("Error adding document: ", error);
+      console.error('Erro ao atualizar campo:', error);
       throw error;
     }
   },
 
-  async updateUserType(uid: string, userType: 'individual' | 'company_owner' | 'company_colab' | 'admin'): Promise<void> {
+  async deleteUser(uid: string) {
     try {
-      const userDocRef = doc(db, 'usuarios', uid);
-      await updateDoc(userDocRef, { userType: userType });
-      console.log(`User ${uid} updated to type: ${userType}`);
+      console.log('Deletando usuário:', uid);
+      const userRef = doc(db, 'usuarios', uid);
+      await deleteDoc(userRef);
+      console.log('Usuário deletado com sucesso');
     } catch (error) {
-      console.error("Error updating user type: ", error);
+      console.error('Erro ao deletar usuário:', error);
       throw error;
     }
   },
 
-  async updateUserField(uid: string, field: string, value: any): Promise<void> {
+  async getUserAgency(uid: string) {
     try {
-      const userDocRef = doc(db, 'usuarios', uid);
-      await updateDoc(userDocRef, { [field]: value });
-      console.log(`User ${uid} updated field ${field}`);
+      console.log('Verificando agência do usuário:', uid);
+      const agenciasRef = collection(db, 'agencias');
+      const q = query(agenciasRef, where('colaboradores', 'array-contains', uid));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const agencyDoc = snapshot.docs[0];
+        console.log('Agência encontrada:', agencyDoc.id);
+        return { id: agencyDoc.id, ...agencyDoc.data() };
+      } else {
+        console.log('Usuário não pertence a nenhuma agência');
+        return null;
+      }
     } catch (error) {
-      console.error(`Error updating user ${uid} field ${field}: `, error);
+      console.error('Erro ao verificar agência:', error);
       throw error;
     }
   },
 
-  async getAllCompanies(): Promise<any[]> {
+  async getAllAgencies() {
     try {
-      const companiesCollection = collection(db, 'companies');
-      const companiesSnapshot = await getDocs(companiesCollection);
-      return companiesSnapshot.docs.map(doc => ({
+      console.log('🏢 Buscando todas as agências...');
+      const agenciasRef = collection(db, 'agencias');
+      const snapshot = await getDocs(agenciasRef);
+      
+      const agencies = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      console.log('✅ Agências encontradas:', agencies.length);
+      return agencies;
     } catch (error) {
-      console.error("Error fetching companies: ", error);
+      console.error('❌ Erro ao buscar agências:', error);
       throw error;
     }
   },
 
-  async getAllUsers(): Promise<any[]> {
+  async saveKanbanBoard(agencyId: string, boardData: any) {
     try {
-      const usersCollection = collection(db, 'usuarios');
-      const usersSnapshot = await getDocs(usersCollection);
-      return usersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      console.log('💾 Salvando board do Kanban para agência:', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
+      
+      await updateDoc(agencyRef, {
+        kanbanBoard: boardData,
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log('✅ Board do Kanban salvo com sucesso');
     } catch (error) {
-      console.error("Error fetching users: ", error);
+      console.error('❌ Erro ao salvar board do Kanban:', error);
       throw error;
     }
   },
 
-  async banUser(userId: string, banned: boolean): Promise<void> {
+  async getKanbanBoard(agencyId: string) {
     try {
-      const userDocRef = doc(db, 'usuarios', userId);
-      await updateDoc(userDocRef, { banned });
-      console.log(`User ${userId} ${banned ? 'banned' : 'unbanned'}`);
+      console.log('📦 Buscando board do Kanban para agência:', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+      
+      if (agencyDoc.exists()) {
+        const data = agencyDoc.data();
+        console.log('✅ Board do Kanban encontrado');
+        return data.kanbanBoard || null;
+      }
+      
+      console.log('❌ Agência não encontrada');
+      return null;
     } catch (error) {
-      console.error("Error updating user ban status: ", error);
+      console.error('❌ Erro ao buscar board do Kanban:', error);
       throw error;
     }
   },
 
-  async updateUserSubscription(userId: string, subscription: string): Promise<void> {
+  async sendInvite(inviteData: any) {
     try {
-      const userDocRef = doc(db, 'usuarios', userId);
-      await updateDoc(userDocRef, { subscription });
-      console.log(`User ${userId} subscription updated to ${subscription}`);
-    } catch (error) {
-      console.error("Error updating user subscription: ", error);
-      throw error;
-    }
-  },
-
-  async createCompany(companyData: any): Promise<string> {
-    try {
-      const companiesCollection = collection(db, 'companies');
-      const docRef = await addDoc(companiesCollection, companyData);
-      console.log("Company created with ID: ", docRef.id);
+      console.log('📧 Enviando convite:', inviteData);
+      const invitesRef = collection(db, 'convites');
+      
+      const newInvite = {
+        ...inviteData,
+        sentAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(invitesRef, newInvite);
+      console.log('✅ Convite enviado com ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error("Error creating company: ", error);
+      console.error('❌ Erro ao enviar convite:', error);
       throw error;
     }
   },
 
-  async updateCompanyField(companyId: string, field: string, value: any): Promise<void> {
+  async getCompanyInvites(companyId: string) {
     try {
-      const companyDocRef = doc(db, 'companies', companyId);
-      await updateDoc(companyDocRef, { [field]: value });
-      console.log(`Company ${companyId} updated field ${field}`);
-    } catch (error) {
-      console.error(`Error updating company ${companyId} field ${field}: `, error);
-      throw error;
-    }
-  },
-
-  async getCompanyInvites(companyId: string): Promise<any[]> {
-    try {
-      const invitesQuery = query(
-        collection(db, 'invites'),
-        where('companyId', '==', companyId),
-        where('status', '==', 'pending')
-      );
-      const snapshot = await getDocs(invitesQuery);
-      return snapshot.docs.map(doc => ({
+      console.log('📋 Buscando convites da empresa:', companyId);
+      const invitesRef = collection(db, 'convites');
+      const q = query(invitesRef, where('companyId', '==', companyId));
+      const snapshot = await getDocs(q);
+      
+      const invites = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-    } catch (error) {
-      console.error('Error fetching company invites:', error);
-      throw error;
-    }
-  },
-
-  async sendCompanyInvite(inviteData: any): Promise<void> {
-    try {
-      const invitesCollection = collection(db, 'invites');
-      await addDoc(invitesCollection, {
-        ...inviteData,
-        sentAt: new Date(),
-        createdAt: new Date().toISOString()
-      });
-      console.log('Company invite sent successfully');
-    } catch (error) {
-      console.error('Error sending company invite:', error);
-      throw error;
-    }
-  },
-
-  async removeCollaboratorFromCompany(companyId: string, memberUid: string): Promise<void> {
-    try {
-      const companyDocRef = doc(db, 'companies', companyId);
-      const companyDoc = await getDoc(companyDocRef);
       
-      if (companyDoc.exists()) {
-        const companyData = companyDoc.data();
-        const updatedCollaborators = companyData.collaborators?.filter(
-          (collab: any) => collab.uid !== memberUid
-        ) || [];
+      console.log('✅ Convites encontrados:', invites.length);
+      return invites;
+    } catch (error) {
+      console.error('❌ Erro ao buscar convites:', error);
+      throw error;
+    }
+  },
+
+  async removeCompanyMember(companyId: string, memberId: string) {
+    try {
+      console.log('👥 Removendo membro da empresa:', { companyId, memberId });
+      const agencyRef = doc(db, 'agencias', companyId);
+      const agencyDoc = await getDoc(agencyRef);
+      
+      if (agencyDoc.exists()) {
+        const data = agencyDoc.data();
+        const colaboradores = data.colaboradores || [];
         
-        await updateDoc(companyDocRef, { collaborators: updatedCollaborators });
-        console.log(`Collaborator ${memberUid} removed from company ${companyId}`);
+        const updatedColaboradores = colaboradores.filter(colab => colab.uid !== memberId);
+        
+        await updateDoc(agencyRef, {
+          colaboradores: updatedColaboradores,
+          updatedAt: serverTimestamp()
+        });
+        
+        console.log('✅ Membro removido com sucesso');
       }
     } catch (error) {
-      console.error('Error removing collaborator:', error);
-      throw error;
-    }
-  },
-
-  async getKanbanBoard(companyId: string): Promise<any> {
-    try {
-      const boardDocRef = doc(db, 'kanban_boards', companyId);
-      const boardDocSnap = await getDoc(boardDocRef);
-
-      if (boardDocSnap.exists()) {
-        return boardDocSnap.data();
-      } else {
-        return null;
-      }
-    } catch (error) {
-      console.error("Error fetching kanban board:", error);
-      throw error;
-    }
-  },
-
-  async saveKanbanBoard(companyId: string, boardData: any): Promise<void> {
-    try {
-      const boardDocRef = doc(db, 'kanban_boards', companyId);
-      await setDoc(boardDocRef, {
-        ...boardData,
-        companyId,
-        updatedAt: new Date().toISOString()
-      });
-      console.log(`Kanban board saved for company ${companyId}`);
-    } catch (error) {
-      console.error("Error saving kanban board:", error);
-      throw error;
-    }
-  },
-
-  async getCompanyData(companyId: string): Promise<any> {
-    try {
-      const companyDocRef = doc(db, 'companies', companyId);
-      const companyDocSnap = await getDoc(companyDocRef);
-
-      if (companyDocSnap.exists()) {
-        return companyDocSnap.data();
-      } else {
-        console.log("No such company!");
-        return null;
-      }
-    } catch (error) {
-      console.error("Error fetching company data:", error);
-      throw error;
-    }
-  },
-
-  async getAnalyticsData(): Promise<any> {
-    try {
-      // Mock analytics data for now - replace with actual implementation
-      const users = await this.getAllUsers();
-      const companies = await this.getAllCompanies();
-      
-      return {
-        overview: {
-          totalUsers: users.length,
-          totalCompanies: companies.length,
-          totalRevenue: 0,
-          activeUsers: users.filter(u => !u.banned).length
-        },
-        userStats: {
-          conversionRate: 15.5,
-          userTypes: {
-            individual: users.filter(u => u.userType === 'individual').length,
-            company_owner: users.filter(u => u.userType === 'company_owner').length,
-            employee: users.filter(u => u.userType === 'company_colab').length,
-            admin: users.filter(u => u.userType === 'admin').length
-          }
-        },
-        businessStats: {
-          totalJobs: 0,
-          approvedJobs: 0,
-          pendingJobs: 0,
-          averageJobValue: 0,
-          jobApprovalRate: 85.2
-        },
-        recentActivity: {
-          newUsersThisMonth: 12,
-          newCompaniesThisMonth: 3,
-          newJobsThisMonth: 25
-        },
-        productivity: {
-          taskCompletionRate: 78.5,
-          averageTasksPerUser: 4.2
-        }
-      };
-    } catch (error) {
-      console.error("Error fetching analytics data:", error);
+      console.error('❌ Erro ao remover membro:', error);
       throw error;
     }
   },
 
   async updateField(collection: string, docId: string, field: string, value: any) {
     try {
+      console.log(`💾 Atualizando ${field} em ${collection}/${docId}`);
       const docRef = doc(db, collection, docId);
-      await updateDoc(docRef, { [field]: value });
-      console.log(`✅ Campo ${field} atualizado em ${collection}/${docId}`);
+      
+      await updateDoc(docRef, {
+        [field]: value,
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log('✅ Campo atualizado com sucesso');
     } catch (error) {
-      console.error(`❌ Erro ao atualizar campo ${field}:`, error);
+      console.error('❌ Erro ao atualizar campo:', error);
+      throw error;
+    }
+  },
+
+  async getAgencyData(agencyId: string) {
+    try {
+      console.log('🏢 Buscando dados da agência:', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+      
+      if (agencyDoc.exists()) {
+        console.log('✅ Dados da agência encontrados');
+        return { id: agencyDoc.id, ...agencyDoc.data() };
+      }
+      
+      console.log('❌ Agência não encontrada');
+      return null;
+    } catch (error) {
+      console.error('❌ Erro ao buscar dados da agência:', error);
+      throw error;
+    }
+  },
+
+  async getAllUsers() {
+    try {
+      console.log('👥 Buscando todos os usuários...');
+      const usersRef = collection(db, 'usuarios');
+      const snapshot = await getDocs(usersRef);
+      
+      const users = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      console.log('✅ Usuários encontrados:', users.length);
+      return users;
+    } catch (error) {
+      console.error('❌ Erro ao buscar usuários:', error);
+      throw error;
+    }
+  },
+
+  async getAllCompanies() {
+    try {
+      console.log('🏢 Buscando todas as empresas...');
+      const companiesRef = collection(db, 'agencias');
+      const snapshot = await getDocs(companiesRef);
+      
+      const companies = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      console.log('✅ Empresas encontradas:', companies.length);
+      return companies;
+    } catch (error) {
+      console.error('❌ Erro ao buscar empresas:', error);
+      throw error;
+    }
+  },
+
+  async getAnalyticsData() {
+    try {
+      console.log('📊 Calculando dados de analytics...');
+      
+      const [users, companies] = await Promise.all([
+        this.getAllUsers(),
+        this.getAllCompanies()
+      ]);
+
+      // Calcular métricas básicas
+      const totalUsers = users.length;
+      const totalCompanies = companies.length;
+      const activeUsers = users.filter(u => !u.banned).length;
+      
+      // Análise por tipo de usuário
+      const userTypes = {
+        individual: users.filter(u => u.userType === 'individual').length,
+        company_owner: users.filter(u => u.userType === 'company_owner').length,
+        employee: users.filter(u => u.userType === 'employee').length,
+        admin: users.filter(u => u.userType === 'admin').length
+      };
+
+      // Análise de planos
+      const subscriptionStats = {
+        free: users.filter(u => !u.subscription || u.subscription === 'free').length,
+        premium: users.filter(u => u.subscription === 'premium').length,
+        enterprise: users.filter(u => u.subscription === 'enterprise').length
+      };
+
+      const analytics = {
+        overview: {
+          totalUsers,
+          totalCompanies,
+          activeUsers,
+          totalRevenue: subscriptionStats.premium * 29 + subscriptionStats.enterprise * 99
+        },
+        userStats: {
+          userTypes,
+          subscriptionStats,
+          conversionRate: totalUsers > 0 ? ((subscriptionStats.premium + subscriptionStats.enterprise) / totalUsers) * 100 : 0
+        },
+        businessStats: {
+          totalJobs: 0,
+          approvedJobs: 0,
+          pendingJobs: 0,
+          averageJobValue: 0,
+          jobApprovalRate: 0
+        },
+        recentActivity: {
+          newUsersThisMonth: 0,
+          newCompaniesThisMonth: 0,
+          newJobsThisMonth: 0
+        },
+        productivity: {
+          taskCompletionRate: 85,
+          averageTasksPerUser: 5.2
+        }
+      };
+
+      console.log('✅ Analytics calculados');
+      return analytics;
+    } catch (error) {
+      console.error('❌ Erro ao calcular analytics:', error);
+      throw error;
+    }
+  },
+
+  async banUser(userId: string, banned: boolean) {
+    try {
+      console.log(`${banned ? '🚫 Banindo' : '✅ Desbanindo'} usuário:`, userId);
+      await this.updateUserField(userId, 'banned', banned);
+      console.log('✅ Status do usuário atualizado');
+    } catch (error) {
+      console.error('❌ Erro ao alterar status do usuário:', error);
+      throw error;
+    }
+  },
+
+  async updateUserSubscription(userId: string, plan: string) {
+    try {
+      console.log('💳 Atualizando plano do usuário:', userId, plan);
+      await this.updateUserField(userId, 'subscription', plan);
+      console.log('✅ Plano atualizado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar plano:', error);
+      throw error;
+    }
+  },
+
+  async createCompany(companyData: any) {
+    try {
+      console.log('🏢 Criando nova empresa:', companyData.name);
+      const companiesRef = collection(db, 'agencias');
+      
+      const newCompany = {
+        ...companyData,
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(companiesRef, newCompany);
+      console.log('✅ Empresa criada com ID:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.error('❌ Erro ao criar empresa:', error);
+      throw error;
+    }
+  },
+
+  async updateCompanyField(companyId: string, field: string, value: any) {
+    try {
+      console.log(`💾 Atualizando ${field} da empresa ${companyId}`);
+      const companyRef = doc(db, 'agencias', companyId);
+      await updateDoc(companyRef, {
+        [field]: value,
+        updatedAt: serverTimestamp()
+      });
+      console.log('✅ Campo da empresa atualizado');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar campo da empresa:', error);
       throw error;
     }
   },
 
   async getUserInvites(userEmail: string) {
     try {
-      const invitesQuery = query(
-        collection(db, 'invites'),
-        where('email', '==', userEmail),
+      console.log('📨 Buscando convites para:', userEmail);
+      const invitesRef = collection(db, 'convites');
+      const q = query(
+        invitesRef, 
+        where('invitedEmail', '==', userEmail),
         where('status', '==', 'pending')
       );
-      const snapshot = await getDocs(invitesQuery);
-      return snapshot.docs.map(doc => ({
+      const snapshot = await getDocs(q);
+      
+      const invites = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      console.log('✅ Convites encontrados:', invites.length);
+      return invites;
     } catch (error) {
       console.error('❌ Erro ao buscar convites:', error);
       throw error;
@@ -364,15 +460,31 @@ export const firestoreService = {
 
   async acceptInvite(inviteId: string, userId: string, companyId: string) {
     try {
+      console.log('✅ Aceitando convite:', inviteId);
+      
       // Atualizar status do convite
-      await updateDoc(doc(db, 'invites', inviteId), {
-        status: 'accepted',
-        acceptedAt: new Date().toISOString()
-      });
-
-      // Atualizar tipo do usuário
-      await this.updateUserType(userId, 'company_colab');
-
+      await this.updateInviteStatus(inviteId, 'accepted');
+      
+      // Adicionar usuário à empresa
+      const companyData = await this.getAgencyData(companyId);
+      if (companyData && companyData.colaboradores) {
+        const userData = await this.getUserData(userId);
+        if (userData) {
+          const newCollaborator = {
+            uid: userId,
+            email: userData.email,
+            role: 'employee'
+          };
+          
+          const updatedCollaborators = [...companyData.colaboradores, newCollaborator];
+          await this.updateCompanyField(companyId, 'colaboradores', updatedCollaborators);
+          
+          // Atualizar tipo do usuário
+          await this.updateUserField(userId, 'userType', 'employee');
+          await this.updateUserField(userId, 'companyId', companyId);
+        }
+      }
+      
       console.log('✅ Convite aceito com sucesso');
     } catch (error) {
       console.error('❌ Erro ao aceitar convite:', error);
@@ -382,25 +494,16 @@ export const firestoreService = {
 
   async updateInviteStatus(inviteId: string, status: string) {
     try {
-      await updateDoc(doc(db, 'invites', inviteId), {
+      console.log('📝 Atualizando status do convite:', inviteId, status);
+      const inviteRef = doc(db, 'convites', inviteId);
+      await updateDoc(inviteRef, {
         status,
-        updatedAt: new Date().toISOString()
+        updatedAt: serverTimestamp()
       });
       console.log('✅ Status do convite atualizado');
     } catch (error) {
       console.error('❌ Erro ao atualizar status do convite:', error);
       throw error;
     }
-  },
-
-  async updateUserData(uid: string, userData: Partial<FirestoreUser>): Promise<void> {
-    try {
-      const userDocRef = doc(db, 'usuarios', uid);
-      await updateDoc(userDocRef, userData);
-      console.log(`User ${uid} data updated`);
-    } catch (error) {
-      console.error("Error updating user data: ", error);
-      throw error;
-    }
-  },
+  }
 };

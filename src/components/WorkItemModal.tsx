@@ -1,150 +1,139 @@
 
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Briefcase, Save } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import { useAppContext } from '../contexts/AppContext';
 import { toast } from '@/hooks/use-toast';
-import { useApp } from '../contexts/AppContext';
-import { useAuth } from '../contexts/AuthContext';
+
+const EQUIPMENT_CATEGORIES = [
+  'Câmera',
+  'Lente', 
+  'Hardware',
+  'Software',
+  'Iluminação',
+  'Audio',
+  'Acessórios',
+  'Outros'
+];
 
 interface WorkItemModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  editingItem?: any;
+  editingItem?: any | null;
 }
 
 const WorkItemModal = ({ open, onOpenChange, editingItem }: WorkItemModalProps) => {
-  const { addWorkItem, updateWorkItem } = useApp();
-  const { user } = useAuth();
-  const [submitting, setSubmitting] = useState(false);
+  const { addWorkItem, updateWorkItem } = useAppContext();
   const [formData, setFormData] = useState({
     description: '',
     category: '',
-    value: '',
-    depreciationYears: '5'
+    value: 0,
+    depreciationYears: 5
   });
 
+  // Resetar e popular formulário quando abrir modal
   useEffect(() => {
-    if (editingItem) {
-      setFormData({
-        description: editingItem.description || '',
-        category: editingItem.category || '',
-        value: editingItem.value?.toString() || '',
-        depreciationYears: editingItem.depreciationYears?.toString() || '5'
-      });
-    } else {
-      setFormData({
-        description: '',
-        category: '',
-        value: '',
-        depreciationYears: '5'
-      });
-    }
-  }, [editingItem, open]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.description || !formData.category || !formData.value) {
-      toast({
-        title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!user?.id) {
-      toast({
-        title: "Erro",
-        description: "Usuário não autenticado",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setSubmitting(true);
-
-    try {
-      const itemData = {
-        description: formData.description,
-        category: formData.category,
-        value: parseFloat(formData.value),
-        depreciationYears: parseInt(formData.depreciationYears),
-        userId: user.id
-      };
-
+    if (open) {
       if (editingItem) {
-        await updateWorkItem(editingItem.id, itemData);
-        toast({
-          title: "Sucesso",
-          description: "Item atualizado com sucesso!"
+        setFormData({
+          description: editingItem.description || '',
+          category: editingItem.category || '',
+          value: editingItem.value || 0,
+          depreciationYears: editingItem.depreciationYears || 5
         });
       } else {
-        await addWorkItem(itemData);
+        setFormData({
+          description: '',
+          category: '',
+          value: 0,
+          depreciationYears: 5
+        });
+      }
+    }
+  }, [open, editingItem]);
+
+  const handleSave = async () => {
+    if (!formData.description || !formData.category || formData.value <= 0) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      if (editingItem) {
+        await updateWorkItem(editingItem.id, formData);
         toast({
-          title: "Sucesso",
-          description: "Item adicionado com sucesso!"
+          title: "Item Atualizado",
+          description: "O item foi atualizado com sucesso.",
+        });
+      } else {
+        await addWorkItem(formData);
+        toast({
+          title: "Item Adicionado",
+          description: "O item de trabalho foi adicionado com sucesso.",
         });
       }
 
+      setFormData({
+        description: '',
+        category: '',
+        value: 0,
+        depreciationYears: 5
+      });
       onOpenChange(false);
     } catch (error) {
-      console.error('Erro ao salvar item:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar item",
+        description: editingItem ? "Erro ao atualizar item." : "Erro ao adicionar item.",
         variant: "destructive"
       });
-    } finally {
-      setSubmitting(false);
     }
   };
 
-  const categories = [
-    'Câmeras',
-    'Lentes',
-    'Iluminação',
-    'Áudio',
-    'Tripés e Suportes',
-    'Acessórios',
-    'Computadores',
-    'Software',
-    'Veículos',
-    'Outros'
-  ];
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[95vw] max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {editingItem ? 'Editar Item' : 'Adicionar Novo Item'}
+          <DialogTitle className="flex items-center gap-2">
+            <Briefcase className="h-5 w-5" />
+            {editingItem ? 'Editar Item' : 'Novo Item de Trabalho'}
           </DialogTitle>
         </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="description">Descrição *</Label>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="item-description">Descrição *</Label>
             <Input
-              id="description"
+              id="item-description"
               value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Ex: Canon EOS R5"
-              required
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              placeholder="Ex: Câmera DSLR"
             />
           </div>
-
-          <div>
-            <Label htmlFor="category">Categoria *</Label>
-            <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
-              <SelectTrigger>
+          
+          <div className="space-y-2">
+            <Label htmlFor="item-category">Categoria *</Label>
+            <Select
+              value={formData.category}
+              onValueChange={(value) => setFormData({...formData, category: value})}
+            >
+              <SelectTrigger className="bg-white">
                 <SelectValue placeholder="Selecione uma categoria" />
               </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
+              <SelectContent className="bg-white border shadow-lg z-50">
+                {EQUIPMENT_CATEGORIES.map((category) => (
                   <SelectItem key={category} value={category}>
                     {category}
                   </SelectItem>
@@ -153,55 +142,45 @@ const WorkItemModal = ({ open, onOpenChange, editingItem }: WorkItemModalProps) 
             </Select>
           </div>
 
-          <div>
-            <Label htmlFor="value">Valor (R$) *</Label>
-            <Input
-              id="value"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.value}
-              onChange={(e) => setFormData(prev => ({ ...prev, value: e.target.value }))}
-              placeholder="0,00"
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="item-value">Valor (R$) *</Label>
+              <CurrencyInput
+                id="item-value"
+                value={formData.value}
+                onChange={(value) => setFormData({...formData, value})}
+                placeholder="0,00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="item-depreciation">Anos de Depreciação</Label>
+              <Input
+                id="item-depreciation"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="20"
+                value={formData.depreciationYears || ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const clean = raw.replace(/^0+/, "");
+                  setFormData({ ...formData, depreciationYears: Number(clean) });
+                }}
+                placeholder="5"
+              />
+            </div>
           </div>
 
-          <div>
-            <Label htmlFor="depreciationYears">Anos de Depreciação</Label>
-            <Select value={formData.depreciationYears} onValueChange={(value) => setFormData(prev => ({ ...prev, depreciationYears: value }))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 ano</SelectItem>
-                <SelectItem value="2">2 anos</SelectItem>
-                <SelectItem value="3">3 anos</SelectItem>
-                <SelectItem value="5">5 anos</SelectItem>
-                <SelectItem value="10">10 anos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="flex-1"
-              disabled={submitting}
-            >
+          <div className="flex flex-col md:flex-row gap-2 pt-4">
+            <Button onClick={handleSave} className="flex-1 order-1">
+              <Save className="h-4 w-4 mr-2" />
+              {editingItem ? 'Atualizar' : 'Salvar'}
+            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="order-2 md:order-2">
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              className="flex-1"
-              disabled={submitting}
-            >
-              {submitting ? 'Salvando...' : editingItem ? 'Atualizar' : 'Adicionar'}
-            </Button>
           </div>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

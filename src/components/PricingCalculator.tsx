@@ -1,228 +1,434 @@
 import React, { useState, useEffect } from 'react';
+import { Calculator, Save, DollarSign, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calculator, DollarSign, Clock, Target, Briefcase, AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { usePrivacy } from '../contexts/PrivacyContext';
-import { useApp } from '../contexts/AppContext';
+import { Textarea } from '@/components/ui/textarea';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import { PercentageInput } from '@/components/ui/percentage-input';
+import { toast } from '@/hooks/use-toast';
+import { useAppContext } from '../contexts/AppContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { formatCurrency } from '../utils/formatters';
+import { firestoreService } from '../services/firestore';
+import ManualValueModal from './ManualValueModal';
 
 const PricingCalculator = () => {
-  const [serviceType, setServiceType] = useState('filmagem');
-  const [difficulty, setDifficulty] = useState('médio');
-  const [hours, setHours] = useState(8);
-  const [equipmentCost, setEquipmentCost] = useState(100);
-  const [logisticsCost, setLogisticsCost] = useState(50);
-  const [assistanceCost, setAssistanceCost] = useState(30);
-  const [profitMargin, setProfitMargin] = useState(30);
-  const [discount, setDiscount] = useState(0);
-  const [calculatedPrice, setCalculatedPrice] = useState(0);
-  const [error, setError] = useState('');
+  const { addJob, workRoutine } = useAppContext();
+  const { currentTheme } = useTheme();
+  const { user } = useAuth();
+  const [showManualValue, setShowManualValue] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    description: '',
+    client: '',
+    eventDate: '',
+    estimatedHours: 0,
+    difficultyLevel: 'médio' as 'fácil' | 'médio' | 'complicado' | 'difícil',
+    logisticsValue: 0,
+    equipmentValue: 0,
+    assistanceValue: 0,
+    category: '',
+    discountPercentage: 0
+  });
 
-  const { formatValue } = usePrivacy();
-	const { jobs } = useApp();
+  const [calculatedPrice, setCalculatedPrice] = useState({
+    totalCosts: 0,
+    serviceValue: 0,
+    valueWithDiscount: 0,
+    hourlyRate: 0,
+    additionalCosts: 0
+  });
 
-  useEffect(() => {
-    calculatePrice();
-  }, [serviceType, difficulty, hours, equipmentCost, logisticsCost, assistanceCost, profitMargin, discount, jobs]);
+  const jobCategories = [
+    "Filmagem de Casamento",
+    "Vídeo Institucional", 
+    "Clipe Musical",
+    "Reels/TikTok",
+    "VSL (Video Sales Letter)",
+    "Edição Simples",
+    "Edição Complexa",
+    "Motion Graphics"
+  ];
 
   const calculatePrice = () => {
-    if (hours <= 0 || equipmentCost < 0 || logisticsCost < 0 || assistanceCost < 0 || profitMargin < 0 || discount < 0) {
-      setError('Por favor, insira valores não negativos.');
+    if (!workRoutine) {
+      toast({
+        title: "Erro",
+        description: "Configure sua rotina de trabalho primeiro.",
+        variant: "destructive"
+      });
       return;
     }
 
-    setError('');
-
-    let baseValue = 0;
-    switch (difficulty) {
-      case 'fácil':
-        baseValue = 50;
-        break;
-      case 'médio':
-        baseValue = 100;
-        break;
-      case 'complicado':
-        baseValue = 150;
-        break;
-      case 'difícil':
-        baseValue = 200;
-        break;
-      default:
-        baseValue = 100;
+    if (formData.estimatedHours <= 0) {
+      toast({
+        title: "Erro", 
+        description: "Informe as horas estimadas.",
+        variant: "destructive"
+      });
+      return;
     }
 
-    let totalCost = equipmentCost + logisticsCost + assistanceCost;
-    let serviceValue = baseValue * hours;
-    let profit = serviceValue * (profitMargin / 100);
-    let finalValue = serviceValue + profit + totalCost;
-    let discountAmount = finalValue * (discount / 100);
-    let discountedValue = finalValue - discountAmount;
+    // Valor base por hora (E36 na planilha)
+    const baseHourlyRate = workRoutine.valuePerHour;
+    
+    // Horas estimadas (C11 na planilha)
+    const estimatedHours = formData.estimatedHours;
 
-    setCalculatedPrice(discountedValue);
+    // Cálculo conforme a planilha Excel
+    let serviceValue = 0;
+    
+    switch (formData.difficultyLevel) {
+      case 'fácil':
+        serviceValue = baseHourlyRate * estimatedHours; // Sem multiplicador
+        break;
+      case 'médio':
+        serviceValue = baseHourlyRate * estimatedHours; // Sem multiplicador
+        break;
+      case 'complicado':
+        serviceValue = baseHourlyRate * estimatedHours * 1.5; // 50% a mais
+        break;
+      case 'difícil':
+        serviceValue = baseHourlyRate * estimatedHours * 2.0; // 100% a mais
+        break;
+      default:
+        serviceValue = baseHourlyRate * estimatedHours;
+    }
+
+    // Custos adicionais
+    const additionalCosts = formData.logisticsValue + formData.equipmentValue + formData.assistanceValue;
+
+    // Valor total = valor do serviço + custos adicionais
+    const totalCosts = serviceValue + additionalCosts;
+
+    // Aplicar desconto se houver
+    const discountAmount = (totalCosts * formData.discountPercentage) / 100;
+    const valueWithDiscount = totalCosts - discountAmount;
+    
+    setCalculatedPrice({
+      totalCosts,
+      serviceValue,
+      valueWithDiscount,
+      hourlyRate: baseHourlyRate,
+      additionalCosts
+    });
+
+    toast({
+      title: "Preço Calculado!",
+      description: "O orçamento foi calculado conforme sua planilha.",
+    });
+  };
+
+  const saveJob = async () => {
+    if (!formData.description || !formData.client || calculatedPrice.totalCosts === 0) {
+      toast({
+        title: "Erro",
+        description: "Preencha os campos obrigatórios e calcule o preço primeiro.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Erro",
+        description: "Usuário não encontrado.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const newJob = {
+      description: formData.description,
+      client: formData.client,
+      eventDate: formData.eventDate,
+      estimatedHours: formData.estimatedHours,
+      difficultyLevel: formData.difficultyLevel,
+      logistics: formData.logisticsValue,
+      equipment: formData.equipmentValue,
+      assistance: formData.assistanceValue,
+      status: 'pendente' as const,
+      category: formData.category,
+      discountValue: (calculatedPrice.totalCosts * formData.discountPercentage) / 100,
+      totalCosts: calculatedPrice.totalCosts,
+      serviceValue: calculatedPrice.serviceValue,
+      valueWithDiscount: calculatedPrice.valueWithDiscount,
+      profitMargin: 0,
+      id: `job_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      userId: user.id
+    };
+
+    try {
+      // Adicionar ao estado local
+      addJob(newJob);
+
+      // Salvar no Firebase
+      const currentData = await firestoreService.getUserData(user.id);
+      const existingJobs = (currentData && 'jobs' in currentData && currentData.jobs) ? currentData.jobs : [];
+      const updatedJobs = [...existingJobs, newJob];
+      
+      await firestoreService.updateField('usuarios', user.id, 'jobs', updatedJobs);
+
+      toast({
+        title: "Job Salvo!",
+        description: `Orçamento de ${formData.description} salvo com sucesso.`,
+      });
+
+      // Reset form
+      setFormData({
+        description: '',
+        client: '',
+        eventDate: '',
+        estimatedHours: 0,
+        difficultyLevel: 'médio',
+        logisticsValue: 0,
+        equipmentValue: 0,
+        assistanceValue: 0,
+        category: '',
+        discountPercentage: 0
+      });
+      setCalculatedPrice({
+        totalCosts: 0,
+        serviceValue: 0,
+        valueWithDiscount: 0,
+        hourlyRate: 0,
+        additionalCosts: 0
+      });
+
+    } catch (error) {
+      console.error('❌ Erro ao salvar job:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar job no Firebase.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calculator className="h-5 w-5 text-purple-600" />
-          Calculadora de Orçamento
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="service-type">Tipo de Serviço</Label>
-            <Select value={serviceType} onValueChange={setServiceType}>
-              <SelectTrigger id="service-type">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="filmagem">Filmagem</SelectItem>
-                <SelectItem value="fotografia">Fotografia</SelectItem>
-                <SelectItem value="edição">Edição</SelectItem>
-                <SelectItem value="design">Design</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="difficulty">Nível de Dificuldade</Label>
-            <Select value={difficulty} onValueChange={setDifficulty}>
-              <SelectTrigger id="difficulty">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="fácil">Fácil</SelectItem>
-                <SelectItem value="médio">Médio</SelectItem>
-                <SelectItem value="complicado">Complicado</SelectItem>
-                <SelectItem value="difícil">Difícil</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="space-y-6 pb-20 md:pb-6">
+      <div className="text-center space-y-2">
+        <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
+          <Calculator className={`text-${currentTheme.accent}`} />
+          Calculadora Inteligente
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400">Calcule automaticamente baseado em seus custos e rotina</p>
+        
+        {/* NOVO: Botão para valores manuais */}
+        <div className="pt-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowManualValue(true)}
+            className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar Valor Manual
+          </Button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="hours">
-              Horas Estimadas <Badge variant="secondary">Opcional</Badge>
-            </Label>
-            <div className="relative">
-              <Input
-                type="number"
-                id="hours"
-                placeholder="8"
-                value={hours}
-                onChange={(e) => setHours(Number(e.target.value))}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Form */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Dados do Projeto</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="description">Descrição do Job *</Label>
+              <Textarea
+                id="description"
+                placeholder="Descreva o projeto..."
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
               />
-              <Clock className="absolute top-2.5 right-2 h-5 w-5 text-gray-500 peer-focus:text-purple-600" />
             </div>
-          </div>
 
-          <div>
-            <Label htmlFor="equipment-cost">
-              Custo de Equipamento <Badge variant="secondary">Opcional</Badge>
-            </Label>
-            <div className="relative">
-              <Input
-                type="number"
-                id="equipment-cost"
-                placeholder="100"
-                value={equipmentCost}
-                onChange={(e) => setEquipmentCost(Number(e.target.value))}
-              />
-              <Briefcase className="absolute top-2.5 right-2 h-5 w-5 text-gray-500 peer-focus:text-purple-600" />
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="client">Cliente *</Label>
+                <Input
+                  id="client"
+                  placeholder="Nome do cliente"
+                  value={formData.client}
+                  onChange={(e) => setFormData({...formData, client: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="eventDate">Data do Evento</Label>
+                <Input
+                  id="eventDate"
+                  type="date"
+                  value={formData.eventDate}
+                  onChange={(e) => setFormData({...formData, eventDate: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="estimatedHours">Horas Estimadas *</Label>
+                <Input
+                  id="estimatedHours"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="8"
+                  value={formData.estimatedHours || ''}
+                  onChange={(e) => setFormData({...formData, estimatedHours: Number(e.target.value) || 0})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="difficulty">Nível de Dificuldade</Label>
+                <Select value={formData.difficultyLevel} onValueChange={(value: any) => setFormData({...formData, difficultyLevel: value})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fácil">Fácil</SelectItem>
+                    <SelectItem value="médio">Médio</SelectItem>
+                    <SelectItem value="complicado">Complicado (+50%)</SelectItem>
+                    <SelectItem value="difícil">Difícil (+100%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">Categoria</Label>
+                <Select value={formData.category} onValueChange={(value) => setFormData({...formData, category: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {jobCategories.map((category) => (
+                      <SelectItem key={category} value={category}>{category}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="discountPercentage">Desconto (%)</Label>
+                <PercentageInput
+                  id="discountPercentage"
+                  value={formData.discountPercentage}
+                  onChange={(value) => setFormData({...formData, discountPercentage: value})}
+                />
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="logistics-cost">
-              Custo de Logística <Badge variant="secondary">Opcional</Badge>
-            </Label>
-            <div className="relative">
-              <Input
-                type="number"
-                id="logistics-cost"
-                placeholder="50"
-                value={logisticsCost}
-                onChange={(e) => setLogisticsCost(Number(e.target.value))}
-              />
-              <Target className="absolute top-2.5 right-2 h-5 w-5 text-gray-500 peer-focus:text-purple-600" />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="logisticsValue">Logística (R$)</Label>
+                <CurrencyInput
+                  id="logisticsValue"
+                  value={formData.logisticsValue}
+                  onChange={(value) => setFormData({...formData, logisticsValue: value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="equipmentValue">Equipamentos (R$)</Label>
+                <CurrencyInput
+                  id="equipmentValue"
+                  value={formData.equipmentValue}
+                  onChange={(value) => setFormData({...formData, equipmentValue: value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="assistanceValue">Assistência (R$)</Label>
+                <CurrencyInput
+                  id="assistanceValue"
+                  value={formData.assistanceValue}
+                  onChange={(value) => setFormData({...formData, assistanceValue: value})}
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <Label htmlFor="assistance-cost">
-              Custo de Assistência <Badge variant="secondary">Opcional</Badge>
-            </Label>
-            <div className="relative">
-              <Input
-                type="number"
-                id="assistance-cost"
-                placeholder="30"
-                value={assistanceCost}
-                onChange={(e) => setAssistanceCost(Number(e.target.value))}
-              />
-              <Briefcase className="absolute top-2.5 right-2 h-5 w-5 text-gray-500 peer-focus:text-purple-600" />
-            </div>
-          </div>
-        </div>
+            <Button onClick={calculatePrice} className={`w-full bg-gradient-to-r ${currentTheme.primary} hover:opacity-90`}>
+              <Calculator className="mr-2 h-4 w-4" />
+              Calcular Preço
+            </Button>
+          </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="profit-margin">Margem de Lucro (%)</Label>
-            <Input
-              type="number"
-              id="profit-margin"
-              placeholder="30"
-              value={profitMargin}
-              onChange={(e) => setProfitMargin(Number(e.target.value))}
-            />
-          </div>
+        {/* Result */}
+        <Card className={`bg-gradient-to-br ${currentTheme.secondary} border-${currentTheme.accent}/20`}>
+          <CardHeader>
+            <CardTitle className={`text-center text-${currentTheme.accent}`}>Resultado</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-6">
+            {calculatedPrice.totalCosts > 0 ? (
+              <>
+                <div className="space-y-4">
+                  <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border">
+                    <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Valor Total</h3>
+                    <div className={`text-2xl font-bold text-${currentTheme.accent}`}>
+                      {formatCurrency(calculatedPrice.totalCosts)}
+                    </div>
+                  </div>
+                  
+                  {formData.discountPercentage > 0 && (
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200">
+                      <h3 className="font-semibold text-green-700 dark:text-green-300 mb-2">Valor com Desconto</h3>
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {formatCurrency(calculatedPrice.valueWithDiscount)}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="text-sm space-y-2">
+                    <div className="flex justify-between">
+                      <span>Valor/Hora Base:</span>
+                      <span className="font-semibold">{formatCurrency(calculatedPrice.hourlyRate)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Serviço ({formData.estimatedHours}h):</span>
+                      <span>{formatCurrency(calculatedPrice.serviceValue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Custos Adicionais:</span>
+                      <span>{formatCurrency(calculatedPrice.additionalCosts)}</span>
+                    </div>
+                    {formData.discountPercentage > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>Desconto ({formData.discountPercentage}%):</span>
+                        <span>-{formatCurrency((calculatedPrice.totalCosts * formData.discountPercentage) / 100)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-          <div>
-            <Label htmlFor="discount">Desconto (%)</Label>
-            <Input
-              type="number"
-              id="discount"
-              placeholder="0"
-              value={discount}
-              onChange={(e) => setDiscount(Number(e.target.value))}
-            />
-          </div>
-        </div>
+                <Button onClick={saveJob} className="w-full bg-green-600 hover:bg-green-700">
+                  <Save className="mr-2 h-4 w-4" />
+                  Salvar Job
+                </Button>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <DollarSign className={`mx-auto h-12 w-12 text-${currentTheme.accent}`} />
+                <h3 className={`text-2xl font-bold text-${currentTheme.accent}`}>Calculadora</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Configure sua rotina de trabalho para usar a calculadora.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-        <div>
-          <Label>Preço Calculado</Label>
-          <div className="relative">
-            <Input
-              type="text"
-              value={formatValue(calculatedPrice)}
-              readOnly
-            />
-            <DollarSign className="absolute top-2.5 right-2 h-5 w-5 text-gray-500" />
-          </div>
-        </div>
-
-        <Button onClick={calculatePrice}>
-          <Calculator className="h-4 w-4 mr-2" />
-          Calcular Orçamento
-        </Button>
-      </CardContent>
-    </Card>
+      {/* NOVO: Modal para valores manuais */}
+      <ManualValueModal 
+        open={showManualValue} 
+        onOpenChange={setShowManualValue}
+      />
+    </div>
   );
 };
 

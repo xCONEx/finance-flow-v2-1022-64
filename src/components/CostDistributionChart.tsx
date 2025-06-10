@@ -1,11 +1,10 @@
-
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { useApp } from '../contexts/AppContext';
+import { useAppContext } from '../contexts/AppContext';
 import { usePrivacy } from '../contexts/PrivacyContext';
 
 const CostDistributionChart = () => {
-  const { monthlyCosts } = useApp();
+  const { monthlyCosts } = useAppContext();
   const { formatValue } = usePrivacy();
 
   const costsByCategory = monthlyCosts.reduce((acc, cost) => {
@@ -37,11 +36,6 @@ const CostDistributionChart = () => {
     );
   }
 
-  const customTooltipFormatter = (value: any) => {
-    const numValue = typeof value === 'number' ? value : 0;
-    return formatValue(numValue);
-  };
-
   return (
     <div className="space-y-4 flex flex-col items-center justify-center w-full">
       {/* Gráfico centralizado responsivo */}
@@ -62,7 +56,7 @@ const CostDistributionChart = () => {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={customTooltipFormatter} />
+              <Tooltip formatter={(value: number) => formatValue(value)} />
             </PieChart>
           </ResponsiveContainer>
         </div>

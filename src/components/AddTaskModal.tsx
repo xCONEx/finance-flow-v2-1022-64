@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Plus, Save } from 'lucide-react';
 import {
@@ -11,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useApp } from '../contexts/AppContext';
+import { useAppContext } from '../contexts/AppContext';
 import { toast } from '@/hooks/use-toast';
 
 interface AddTaskModalProps {
@@ -20,7 +21,7 @@ interface AddTaskModalProps {
 }
 
 const AddTaskModal = ({ open, onOpenChange }: AddTaskModalProps) => {
-  const { addTask } = useApp();
+  const { addTask } = useAppContext();
   const [formData, setFormData] = useState({
     title: '',
     description: '',

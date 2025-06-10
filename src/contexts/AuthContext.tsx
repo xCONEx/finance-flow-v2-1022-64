@@ -20,7 +20,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   loading: boolean;
   userData: FirestoreUser | null;
-  companyData: any | null;
+  agencyData: any | null;
   refreshUserData: () => Promise<void>;
 }
 
@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<FirestoreUser | null>(null);
-  const [companyData, setCompanyData] = useState<any | null>(null);
+  const [agencyData, setAgencyData] = useState<any | null>(null);
 
   const refreshUserData = async () => {
     if (!user?.id) return;
@@ -53,23 +53,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('✅ Dados do usuário atualizados');
       }
       
-      // Recarregar dados da empresa se aplicável
-      if (user.userType === 'company_owner' || user.userType === 'company_colab') {
-        const allCompanies = await firestoreService.getAllCompanies();
+      // Recarregar dados da agência se aplicável
+      if (user.userType === 'company_owner' || user.userType === 'employee') {
+        const allAgencies = await firestoreService.getAllAgencies();
         
-        for (const company of allCompanies) {
-          const companyDataObj = company as any;
+        for (const agency of allAgencies) {
+          const agencyData = agency as any;
           
-          const isOwner = user.userType === 'company_owner' && companyDataObj.ownerUid === user.id;
-          const isCollaborator = user.userType === 'company_colab' && 
-            companyDataObj.collaborators && Array.isArray(companyDataObj.collaborators) && 
-            companyDataObj.collaborators.some((colab: any) => 
+          const isOwner = (
+            (agencyData.ownerId && agencyData.ownerId === user.id) ||
+            (agencyData.ownerUID && agencyData.ownerUID === user.id) ||
+            (agencyData.owner && agencyData.owner === user.id) ||
+            (agencyData.owner && agencyData.owner === user.email) ||
+            (agencyData.ownerId && agencyData.ownerId === user.email)
+          );
+          
+          const isCollaborator = agencyData.colaboradores && Array.isArray(agencyData.colaboradores) && 
+            agencyData.colaboradores.some((colab: any) => 
               colab.uid === user.id || colab.email === user.email
             );
           
           if (isOwner || isCollaborator) {
-            setCompanyData(companyDataObj);
-            console.log('✅ Dados da empresa atualizados');
+            setAgencyData(agencyData);
+            console.log('✅ Dados da agência atualizados');
             break;
           }
         }
@@ -104,57 +110,97 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 dalilyValue: 0,
                 desiredSalary: 0,
                 workDays: 22
-              },
-              userType: 'individual'
+              }
             };
             
             await firestoreService.createUser(newUserData);
             userData = newUserData;
             console.log('✅ Usuário criado com dados padrão');
+          } else {
+            console.log('📦 Dados do usuário encontrados:', {
+              equipments: userData.equipments?.length || 0,
+              expenses: userData.expenses?.length || 0,
+              jobs: userData.jobs?.length || 0,
+              routine: userData.routine
+            });
           }
 
-          // Determinar tipo de usuário baseado no campo userType do documento
-          let userType: 'individual' | 'company_owner' | 'company_colab' | 'admin' = userData.userType || 'individual';
+          // CORRIGIDO: Verificação mais robusta para proprietário da agência
+          console.log('🏢 Verificando se usuário pertence a uma agência...');
+          let userAgency = null;
+          let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
           
-          // Verificar se é admin pelo email
-          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
-          if (isAdmin) {
-            userType = 'admin';
-            // Atualizar o tipo no documento se necessário
-            if (userData.userType !== 'admin') {
-              await firestoreService.updateUserType(firebaseUser.uid, 'admin');
-            }
-          }
-          
-          // Buscar dados da empresa se for company_owner ou company_colab
-          let userCompany = null;
-          if (userType === 'company_owner' || userType === 'company_colab') {
-            try {
-              console.log('🏢 Verificando empresas para usuário:', userType);
-              const allCompanies = await firestoreService.getAllCompanies();
+          try {
+            // Buscar por agências onde o usuário é colaborador
+            const allAgencies = await firestoreService.getAllAgencies();
+            console.log('🔍 Verificando agências:', allAgencies.length);
+            
+            for (const agency of allAgencies) {
+              const agencyData = agency as any; // Type assertion to avoid TypeScript errors
               
-              for (const company of allCompanies) {
-                const companyDataObj = company as any;
+              console.log('🔍 Verificando agência:', agencyData.id, {
+                ownerId: agencyData.ownerId,
+                ownerUID: agencyData.ownerUID,
+                owner: agencyData.owner,
+                userUID: firebaseUser.uid,
+                userEmail: firebaseUser.email
+              });
+              
+              // CORRIGIDO: Verificar múltiplos campos possíveis para proprietário
+              const isOwner = (
+                (agencyData.ownerId && agencyData.ownerId === firebaseUser.uid) ||
+                (agencyData.ownerUID && agencyData.ownerUID === firebaseUser.uid) ||
+                (agencyData.owner && agencyData.owner === firebaseUser.uid) ||
+                (agencyData.owner && agencyData.owner === firebaseUser.email) ||
+                (agencyData.ownerId && agencyData.ownerId === firebaseUser.email)
+              );
+              
+              if (isOwner) {
+                userAgency = agencyData;
+                userType = 'company_owner';
+                console.log('👑 Usuário é DONO da agência:', agencyData.id);
+                console.log('✅ Tipo identificado: PROPRIETÁRIO');
+                break;
+              }
+              
+              // Verificar se é colaborador
+              if (agencyData.colaboradores && Array.isArray(agencyData.colaboradores)) {
+                const isCollaborator = agencyData.colaboradores.some((colab: any) => 
+                  colab.uid === firebaseUser.uid || colab.email === firebaseUser.email
+                );
                 
-                const isOwner = userType === 'company_owner' && companyDataObj.ownerUid === firebaseUser.uid;
-                const isCollaborator = userType === 'company_colab' && 
-                  companyDataObj.collaborators && Array.isArray(companyDataObj.collaborators) && 
-                  companyDataObj.collaborators.some((colab: any) => 
-                    colab.uid === firebaseUser.uid || colab.email === firebaseUser.email
-                  );
-                
-                if (isOwner || isCollaborator) {
-                  userCompany = companyDataObj;
-                  console.log('🏢 Empresa encontrada:', companyDataObj.id);
+                if (isCollaborator) {
+                  userAgency = agencyData;
+                  userType = 'employee';
+                  console.log('👥 Usuário é colaborador da agência:', agencyData.id);
                   break;
                 }
               }
-              
-              setCompanyData(userCompany);
-            } catch (error) {
-              console.error('❌ Erro ao buscar empresas:', error);
-              setCompanyData(null);
             }
+            
+            if (userAgency) {
+              console.log('🏢 Usuário encontrado em agência:', userAgency.id);
+              console.log('📦 Dados da agência carregados:', {
+                equipments: userAgency.equipments?.length || 0,
+                expenses: userAgency.expenses?.length || 0,
+                jobs: userAgency.jobs?.length || 0,
+                colaboradores: userAgency.colaboradores?.length || 0
+              });
+              setAgencyData(userAgency);
+            } else {
+              console.log('👤 Usuário individual (não pertence a agência)');
+              setAgencyData(null);
+            }
+            
+          } catch (error) {
+            console.error('❌ Erro ao buscar agências:', error);
+            setAgencyData(null);
+          }
+
+          // Verificar se é admin
+          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com';
+          if (isAdmin) {
+            userType = 'admin';
           }
           
           // Converter para o formato do contexto
@@ -172,6 +218,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           console.log('✅ Dados do usuário carregados com sucesso!');
           console.log('👤 Tipo de usuário FINAL:', userType);
+          if (isAdmin) {
+            console.log('👑 Usuário administrador identificado');
+          }
 
         } catch (error) {
           console.error('❌ Erro ao carregar dados do usuário:', error);
@@ -180,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('👋 Usuário não autenticado');
         setUser(null);
         setUserData(null);
-        setCompanyData(null);
+        setAgencyData(null);
       }
       setLoading(false);
     });
@@ -227,8 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dalilyValue: 0,
           desiredSalary: 0,
           workDays: 22
-        },
-        userType: 'individual'
+        }
       };
 
       await firestoreService.createUser(newUserData);
@@ -259,7 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       register,
       loading,
       userData,
-      companyData,
+      agencyData,
       refreshUserData
     }}>
       {children}
