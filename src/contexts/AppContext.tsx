@@ -37,7 +37,7 @@ export const useAppContext = () => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, userData, agencyData } = useAuth();
+  const { user, userData, companyData } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [monthlyCosts, setMonthlyCosts] = useState<MonthlyCost[]>([]);
   const [workItems, setWorkItems] = useState<WorkItem[]>([]);
@@ -50,7 +50,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (user) {
       loadUserData();
     }
-  }, [user, userData, agencyData]);
+  }, [user, userData, companyData]);
 
   const loadUserData = async () => {
     setLoading(true);
@@ -111,12 +111,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (currentData && 'routine' in currentData && currentData.routine) {
         const routineData = currentData.routine;
         console.log('⚙️ Rotina carregada do Firebase:', routineData);
+        
+        // Calcular valuePerHour se não existir
+        const valuePerHour = routineData.valuePerHour || (routineData.dalilyValue || 0) / (routineData.dailyHours || 8);
+        
         setWorkRoutine({
           desiredSalary: routineData.desiredSalary || 0,
           workDaysPerMonth: routineData.workDays || 22,
           workHoursPerDay: routineData.dailyHours || 8,
           valuePerDay: routineData.dalilyValue || 0,
-          valuePerHour: routineData.valuePerHour || 0,
+          valuePerHour: valuePerHour,
           userId: user!.id
         });
       } else {

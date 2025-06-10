@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword,
@@ -61,7 +60,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         for (const company of allCompanies) {
           const companyDataObj = company as any;
           
-          // CORRIGIDO: usar ownerUid em vez de ownerUID
           const isOwner = user.userType === 'company_owner' && companyDataObj.ownerUid === user.id;
           const isCollaborator = user.userType === 'company_colab' && 
             companyDataObj.collaborators && Array.isArray(companyDataObj.collaborators) && 
@@ -138,7 +136,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               for (const company of allCompanies) {
                 const companyDataObj = company as any;
                 
-                // CORRIGIDO: usar ownerUid em vez de ownerUID
                 const isOwner = userType === 'company_owner' && companyDataObj.ownerUid === firebaseUser.uid;
                 const isCollaborator = userType === 'company_colab' && 
                   companyDataObj.collaborators && Array.isArray(companyDataObj.collaborators) && 

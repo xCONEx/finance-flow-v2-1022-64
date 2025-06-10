@@ -5,7 +5,7 @@ export interface User {
   name: string;
   avatar?: string;
   photoURL?: string;
-  userType: 'admin' | 'company_owner' | 'employee' | 'individual';
+  userType: 'admin' | 'company_owner' | 'company_colab' | 'individual';
   companyId?: string;
   createdAt: string;
 }
