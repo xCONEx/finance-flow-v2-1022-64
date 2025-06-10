@@ -37,6 +37,13 @@ export interface FirestoreUser {
   companyId?: string;
 }
 
+export interface AgencyData {
+  id: string;
+  ownerUID: string;
+  collaborators?: any;
+  [key: string]: any;
+}
+
 // Função helper para verificar se o usuário é colaborador (suporta array e map)
 const isUserCollaborator = (collaborators: any, userUID: string): boolean => {
   if (!collaborators) return false;
@@ -123,12 +130,12 @@ export const firestoreService = {
     await deleteDoc(userRef);
   },
 
-  async getUserAgency(uid: string) {
+  async getUserAgency(uid: string): Promise<AgencyData | null> {
     const agenciasRef = collection(db, 'agencias');
     const snapshot = await getDocs(agenciasRef);
     
-    for (const doc of snapshot.docs) {
-      const agencyData = { id: doc.id, ...doc.data() };
+    for (const docSnapshot of snapshot.docs) {
+      const agencyData = { id: docSnapshot.id, ...docSnapshot.data() } as AgencyData;
       
       // Verificar se é dono
       if (agencyData.ownerUID === uid) {
@@ -144,10 +151,10 @@ export const firestoreService = {
     return null;
   },
 
-  async getAllAgencies() {
+  async getAllAgencies(): Promise<AgencyData[]> {
     const agenciasRef = collection(db, 'agencias');
     const snapshot = await getDocs(agenciasRef);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AgencyData));
   },
 
   async addCollaboratorToCompany(companyId: string, collaboratorUID: string) {
@@ -234,10 +241,10 @@ export const firestoreService = {
     });
   },
 
-  async getAgencyData(agencyId: string) {
+  async getAgencyData(agencyId: string): Promise<AgencyData | null> {
     const agencyRef = doc(db, 'agencias', agencyId);
     const agencyDoc = await getDoc(agencyRef);
-    return agencyDoc.exists() ? { id: agencyDoc.id, ...agencyDoc.data() } : null;
+    return agencyDoc.exists() ? { id: agencyDoc.id, ...agencyDoc.data() } as AgencyData : null;
   },
 
   async getAllUsers() {
