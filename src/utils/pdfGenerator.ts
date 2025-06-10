@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Job, WorkItem, MonthlyCost } from '../types';
 
+
 // Declaração corrigida para autoTable
 declare module 'jspdf' {
   interface jsPDF {
@@ -12,6 +13,7 @@ declare module 'jspdf' {
     };
   }
 }
+
 
 export const generateJobPDF = async (job: Job, userData: any) => {
   const doc = new jsPDF();
@@ -25,13 +27,13 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   doc.text(`Orçamento - ${job.client || 'Cliente'}`, margin, contentStartY);
 
   // Logo ou nome da empresa no canto direito
-  if (userData?.imageuser) {
+  if (userData?.logoBase64) {
     try {
-      const maxWidth = 40;
+      const maxWidth = 30;
       const maxHeight = 20;
       const x = pageWidth - maxWidth - margin;
       const y = contentStartY - 5;
-      doc.addImage(userData.imageuser, 'PNG', x, y, maxWidth, maxHeight);
+      doc.addImage(userData.logoBase64, 'PNG', x, y, maxWidth, maxHeight);
       contentStartY += 10;
     } catch (error) {
       console.error('Erro ao adicionar logo:', error);
@@ -70,6 +72,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   const desconto = (job.serviceValue * (job.discountValue || 0)) / 100;
   const valorComDesconto = job.serviceValue - desconto;
 
+  
   // Tabela de valores
   const tableData = [
     ['Horas estimadas', `${job.estimatedHours || 0}h`],
@@ -88,19 +91,19 @@ export const generateJobPDF = async (job: Job, userData: any) => {
 
   try {
     (doc as any).autoTable({
-      startY: contentStartY + 45,
-      head: [['Item', 'Valor']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [99, 102, 241],
-        textColor: 255,
-        fontSize: 12,
-      },
-      bodyStyles: {
-        fontSize: 11,
-      },
-    });
+  startY: contentStartY + 45,
+  head: [['Item', 'Valor']], // Cabeçalho
+  body: tableData,
+  theme: 'grid',
+  headStyles: {
+    fillColor: [99, 102, 241], // azul
+    textColor: 255,            // branco
+    fontSize: 12,
+  },
+  bodyStyles: {
+    fontSize: 11,
+  },
+});
 
     // Rodapé
     doc.setFontSize(10);
@@ -137,14 +140,14 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
   let contentStartY = 20;
 
   // Logo se disponível
-  if (userData?.imageuser) {
+  if (userData?.logoBase64) {
     try {
       const maxWidth = 40;
       const maxHeight = 20;
       const x = pageWidth - maxWidth - margin;
       const y = contentStartY;
 
-      doc.addImage(userData.imageuser, 'PNG', x, y, maxWidth, maxHeight);
+      doc.addImage(userData.logoBase64, 'PNG', x, y, maxWidth, maxHeight);
       contentStartY = y + maxHeight + 10;
     } catch (error) {
       console.error('Erro ao adicionar logo:', error);
@@ -218,14 +221,14 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
     let contentStartY = 20;
 
     // Logo se disponível
-    if (userData?.imageuser) {
+    if (userData?.logoBase64) {
       try {
         const maxWidth = 40;
         const maxHeight = 20;
         const x = pageWidth - maxWidth - margin;
         const y = contentStartY;
 
-        doc.addImage(userData.imageuser, 'PNG', x, y, maxWidth, maxHeight);
+        doc.addImage(userData.logoBase64, 'PNG', x, y, maxWidth, maxHeight);
         contentStartY = y + maxHeight + 10;
       } catch (error) {
         console.error('Erro ao adicionar logo:', error);
