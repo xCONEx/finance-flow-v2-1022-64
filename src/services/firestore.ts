@@ -194,7 +194,7 @@ export const firestoreService = {
 
   async sendInvite(inviteData: any) {
     try {
-      console.log('📧 Enviando convite:', inviteData);
+      console.log('📧 Enviando convite (requer Admin ou Owner):', inviteData);
       const invitesRef = collection(db, 'invites');
       
       const newInvite = {
@@ -209,14 +209,14 @@ export const firestoreService = {
       console.log('✅ Convite enviado com ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('❌ Erro ao enviar convite:', error);
+      console.error('❌ Erro ao enviar convite (pode ser limitação de permissão):', error);
       throw error;
     }
   },
 
   async getCompanyInvites(companyId: string) {
     try {
-      console.log('📋 Buscando convites da empresa:', companyId);
+      console.log('📋 Buscando convites da empresa (requer Admin ou Owner):', companyId);
       const invitesRef = collection(db, 'invites');
       const q = query(invitesRef, where('agenciaId', '==', companyId));
       const snapshot = await getDocs(q);
@@ -229,14 +229,14 @@ export const firestoreService = {
       console.log('✅ Convites encontrados:', invites.length);
       return invites;
     } catch (error) {
-      console.error('❌ Erro ao buscar convites:', error);
+      console.error('❌ Erro ao buscar convites (pode ser limitação de permissão):', error);
       throw error;
     }
   },
 
   async removeCompanyMember(companyId: string, memberId: string) {
     try {
-      console.log('👥 Removendo membro da empresa:', { companyId, memberId });
+      console.log('👥 Removendo membro da empresa (requer Admin ou Owner):', { companyId, memberId });
       const agencyRef = doc(db, 'agencias', companyId);
       const agencyDoc = await getDoc(agencyRef);
       
@@ -255,7 +255,7 @@ export const firestoreService = {
         console.log('✅ Membro removido com sucesso');
       }
     } catch (error) {
-      console.error('❌ Erro ao remover membro:', error);
+      console.error('❌ Erro ao remover membro (pode ser limitação de permissão):', error);
       throw error;
     }
   },
@@ -406,7 +406,7 @@ export const firestoreService = {
 
   async createCompany(companyData: any) {
     try {
-      console.log('🏢 Criando nova empresa:', companyData.name);
+      console.log('🏢 Criando nova empresa (requer Admin):', companyData.name);
       const companiesRef = collection(db, 'agencias');
       
       const newCompany = {
@@ -418,14 +418,14 @@ export const firestoreService = {
       console.log('✅ Empresa criada com ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('❌ Erro ao criar empresa:', error);
+      console.error('❌ Erro ao criar empresa (pode não ser admin):', error);
       throw error;
     }
   },
 
   async updateCompanyField(companyId: string, field: string, value: any) {
     try {
-      console.log(`💾 Atualizando ${field} da empresa ${companyId}`);
+      console.log(`💾 Atualizando ${field} da empresa ${companyId} (requer Admin)`);
       const companyRef = doc(db, 'agencias', companyId);
       await updateDoc(companyRef, {
         [field]: value,
@@ -433,7 +433,7 @@ export const firestoreService = {
       });
       console.log('✅ Campo da empresa atualizado');
     } catch (error) {
-      console.error('❌ Erro ao atualizar campo da empresa:', error);
+      console.error('❌ Erro ao atualizar campo da empresa (pode não ser admin):', error);
       throw error;
     }
   },

@@ -164,16 +164,16 @@ const CompanyDashboard = () => {
     }
   };
 
-  // Definir permissões baseadas no tipo de usuário
+  // Definir permissões baseadas no tipo de usuário e novas regras
   const isAdmin = user?.userType === 'admin';
   const isOwner = user?.id === agencyData?.ownerUID;
   const isEmployee = user?.userType === 'employee' && !isOwner && !isAdmin;
   
-  // Permissões específicas
-  const canInviteMembers = isAdmin || isOwner;
-  const canRemoveMembers = isAdmin || isOwner;
-  const canViewInvites = isAdmin || isOwner;
-  const canEditCompany = isAdmin; // Apenas Admin pode editar dados da empresa
+  // Permissões específicas conforme as novas regras
+  const canInviteMembers = isAdmin || isOwner; // Admin ou Owner podem convidar
+  const canRemoveMembers = isAdmin || isOwner; // Admin ou Owner podem remover
+  const canViewInvites = isAdmin || isOwner; // Admin ou Owner podem ver convites
+  const canEditCompany = isAdmin; // APENAS Admin pode editar dados da empresa
 
   // Se for colaborador, mostrar interface limitada
   if (isEmployee) {
@@ -245,6 +245,11 @@ const CompanyDashboard = () => {
         <p className="text-gray-600">
           {isAdmin ? 'Gestão administrativa da empresa' : 'Gestão de equipe e colaboradores'}
         </p>
+        {!canEditCompany && isOwner && (
+          <p className="text-sm text-amber-600">
+            ⚠️ Apenas administradores podem editar dados da empresa
+          </p>
+        )}
       </div>
 
       {/* Estatísticas da Empresa */}
