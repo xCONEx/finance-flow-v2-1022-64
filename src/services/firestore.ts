@@ -131,24 +131,41 @@ export const firestoreService = {
   },
 
   async getUserAgency(uid: string): Promise<AgencyData | null> {
-    const agenciasRef = collection(db, 'agencias');
-    const snapshot = await getDocs(agenciasRef);
-    
-    for (const docSnapshot of snapshot.docs) {
-      const agencyData = { id: docSnapshot.id, ...docSnapshot.data() } as AgencyData;
+    try {
+      console.log('🔍 Buscando agência para UID:', uid);
+      const agenciasRef = collection(db, 'agencias');
+      const snapshot = await getDocs(agenciasRef);
       
-      // Verificar se é dono
-      if (agencyData.ownerUID === uid) {
-        return agencyData;
+      console.log('📊 Total de agências encontradas:', snapshot.docs.length);
+      
+      for (const docSnapshot of snapshot.docs) {
+        const agencyData = { id: docSnapshot.id, ...docSnapshot.data() } as AgencyData;
+        
+        console.log('🔍 Verificando agência:', agencyData.id, {
+          ownerUID: agencyData.ownerUID,
+          collaborators: agencyData.collaborators,
+          userUID: uid
+        });
+        
+        // Verificar se é dono
+        if (agencyData.ownerUID === uid) {
+          console.log('👑 Usuário é DONO da agência:', agencyData.id);
+          return agencyData;
+        }
+        
+        // Verificar se é colaborador (suporta array e map)
+        if (isUserCollaborator(agencyData.collaborators, uid)) {
+          console.log('👥 Usuário é COLABORADOR da agência:', agencyData.id);
+          return agencyData;
+        }
       }
       
-      // Verificar se é colaborador
-      if (isUserCollaborator(agencyData.collaborators, uid)) {
-        return agencyData;
-      }
+      console.log('❌ Nenhuma agência encontrada para o usuário:', uid);
+      return null;
+    } catch (error) {
+      console.error('❌ Erro ao buscar agência:', error);
+      return null;
     }
-    
-    return null;
   },
 
   async getAllAgencies(): Promise<AgencyData[]> {
