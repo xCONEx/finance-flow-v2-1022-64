@@ -15,13 +15,13 @@ declare module 'jspdf' {
 
 // Cores do FinanceFlow
 const COLORS = {
-  primary: [79, 70, 229], // Indigo-600
-  secondary: [99, 102, 241], // Indigo-500
-  accent: [147, 51, 234], // Purple-600
-  text: [31, 41, 55], // Gray-800
-  textLight: [107, 114, 128], // Gray-500
-  success: [34, 197, 94], // Green-500
-  background: [248, 250, 252] // Gray-50
+  primary: [79, 70, 229] as [number, number, number], // Indigo-600
+  secondary: [99, 102, 241] as [number, number, number], // Indigo-500
+  accent: [147, 51, 234] as [number, number, number], // Purple-600
+  text: [31, 41, 55] as [number, number, number], // Gray-800
+  textLight: [107, 114, 128] as [number, number, number], // Gray-500
+  success: [34, 197, 94] as [number, number, number], // Green-500
+  background: [248, 250, 252] as [number, number, number] // Gray-50
 };
 
 export const generateJobPDF = async (job: Job, userData: any) => {
@@ -31,7 +31,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   let currentY = 25;
 
   // Header com gradiente simulado
-  doc.setFillColor(...COLORS.primary);
+  doc.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
   doc.rect(0, 0, pageWidth, 35, 'F');
   
   // Título principal
@@ -41,12 +41,12 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   doc.text('ORÇAMENTO', margin, 22);
 
   // Logo premium no header se disponível
-  if (userData?.isPremium && userData?.logoBase64) {
+  if (userData?.premium && userData?.logobase64) {
     try {
       const logoSize = 25;
       const logoX = pageWidth - logoSize - margin;
       const logoY = 5;
-      doc.addImage(userData.logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
+      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
     } catch (error) {
       console.log('Erro ao adicionar logo:', error);
     }
@@ -55,10 +55,10 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   currentY = 50;
 
   // Informações do Cliente
-  doc.setFillColor(...COLORS.background);
+  doc.setFillColor(COLORS.background[0], COLORS.background[1], COLORS.background[2]);
   doc.rect(margin, currentY, pageWidth - (margin * 2), 25, 'F');
   
-  doc.setTextColor(...COLORS.text);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
   doc.setFontSize(14);
   doc.setFont(undefined, 'bold');
   doc.text('INFORMAÇÕES DO CLIENTE', margin + 5, currentY + 8);
@@ -70,10 +70,10 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   currentY += 35;
 
   // Detalhes do Projeto
-  doc.setFillColor(...COLORS.background);
+  doc.setFillColor(COLORS.background[0], COLORS.background[1], COLORS.background[2]);
   doc.rect(margin, currentY, pageWidth - (margin * 2), 35, 'F');
   
-  doc.setTextColor(...COLORS.text);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
   doc.setFontSize(14);
   doc.setFont(undefined, 'bold');
   doc.text('DETALHES DO PROJETO', margin + 5, currentY + 8);
@@ -147,7 +147,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
     // Fallback manual se autoTable falhar
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.setTextColor(...COLORS.text);
+    doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
     doc.text('RESUMO FINANCEIRO', margin, currentY);
     
     currentY += 10;
@@ -163,7 +163,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
   }
 
   // Rodapé elegante
-  doc.setFillColor(...COLORS.primary);
+  doc.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
   doc.rect(0, currentY, pageWidth, 25, 'F');
   
   doc.setTextColor(255, 255, 255);
@@ -182,7 +182,7 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
   let currentY = 25;
 
   // Header com estilo
-  doc.setFillColor(...COLORS.primary);
+  doc.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
   doc.rect(0, 0, pageWidth, 35, 'F');
   
   doc.setTextColor(255, 255, 255);
@@ -191,12 +191,12 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
   doc.text('RELATÓRIO DE ITENS DE TRABALHO', margin, 22);
 
   // Logo premium se disponível
-  if (userData?.isPremium && userData?.logoBase64) {
+  if (userData?.premium && userData?.logobase64) {
     try {
       const logoSize = 25;
       const logoX = pageWidth - logoSize - margin;
       const logoY = 5;
-      doc.addImage(userData.logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
+      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
     } catch (error) {
       console.log('Erro ao adicionar logo:', error);
     }
@@ -205,7 +205,7 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
   currentY = 55;
 
   // Informações gerais
-  doc.setTextColor(...COLORS.text);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
   doc.setFontSize(12);
   doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, currentY);
   doc.text(`Total de itens: ${workItems.length}`, margin, currentY + 8);
@@ -223,7 +223,7 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
   // Criar tabela por categoria
   Object.entries(itemsByCategory).forEach(([category, items]) => {
     // Cabeçalho da categoria
-    doc.setFillColor(...COLORS.secondary);
+    doc.setFillColor(COLORS.secondary[0], COLORS.secondary[1], COLORS.secondary[2]);
     doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
     
     doc.setTextColor(255, 255, 255);
@@ -269,7 +269,7 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
       console.error('Erro ao gerar tabela da categoria:', error);
       // Fallback manual
       categoryData.forEach((row, index) => {
-        doc.setTextColor(...COLORS.text);
+        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
         doc.setFontSize(10);
         doc.text(row[0], margin, currentY + (index * 6));
         doc.text(row[1], pageWidth - margin - 40, currentY + (index * 6));
@@ -281,7 +281,7 @@ export const generateWorkItemsPDF = async (workItems: WorkItem[], userData: any)
   // Total geral
   const totalValue = workItems.reduce((sum, item) => sum + item.value, 0);
   
-  doc.setFillColor(...COLORS.success);
+  doc.setFillColor(COLORS.success[0], COLORS.success[1], COLORS.success[2]);
   doc.rect(margin, currentY, pageWidth - (margin * 2), 12, 'F');
   
   doc.setTextColor(255, 255, 255);
@@ -300,7 +300,7 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
   let currentY = 25;
 
   // Header estilizado
-  doc.setFillColor(...COLORS.primary);
+  doc.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
   doc.rect(0, 0, pageWidth, 35, 'F');
   
   doc.setTextColor(255, 255, 255);
@@ -309,12 +309,12 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
   doc.text('RELATÓRIO DE DESPESAS MENSAIS', margin, 22);
 
   // Logo premium se disponível
-  if (userData?.isPremium && userData?.logoBase64) {
+  if (userData?.premium && userData?.logobase64) {
     try {
       const logoSize = 25;
       const logoX = pageWidth - logoSize - margin;
       const logoY = 5;
-      doc.addImage(userData.logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
+      doc.addImage(userData.logobase64, 'PNG', logoX, logoY, logoSize, logoSize);
     } catch (error) {
       console.log('Erro ao adicionar logo:', error);
     }
@@ -323,7 +323,7 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
   currentY = 55;
 
   // Informações gerais
-  doc.setTextColor(...COLORS.text);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
   doc.setFontSize(12);
   doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, currentY);
   doc.text(`Total de despesas: ${expenses.length}`, margin, currentY + 8);
@@ -341,7 +341,7 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
   // Criar tabela por categoria
   Object.entries(expensesByCategory).forEach(([category, items]) => {
     // Cabeçalho da categoria
-    doc.setFillColor(...COLORS.secondary);
+    doc.setFillColor(COLORS.secondary[0], COLORS.secondary[1], COLORS.secondary[2]);
     doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
     
     doc.setTextColor(255, 255, 255);
@@ -388,7 +388,7 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
       console.error('Erro ao gerar tabela da categoria:', error);
       // Fallback manual
       categoryData.forEach((row, index) => {
-        doc.setTextColor(...COLORS.text);
+        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
         doc.setFontSize(10);
         doc.text(row[0].substring(0, 30), margin, currentY + (index * 6));
         doc.text(row[1], margin + 80, currentY + (index * 6));
@@ -401,7 +401,7 @@ export const generateExpensesPDF = async (expenses: MonthlyCost[], userData: any
   // Total geral
   const totalValue = expenses.reduce((sum, expense) => sum + expense.value, 0);
   
-  doc.setFillColor(...COLORS.success);
+  doc.setFillColor(COLORS.success[0], COLORS.success[1], COLORS.success[2]);
   doc.rect(margin, currentY, pageWidth - (margin * 2), 12, 'F');
   
   doc.setTextColor(255, 255, 255);

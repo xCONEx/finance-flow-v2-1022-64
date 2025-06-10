@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Save, Upload, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -160,7 +161,7 @@ const UserProfile = () => {
     if (!file || !user?.id) return;
 
     // Verificar se é usuário premium
-    if (!userData?.isPremium) {
+    if (!userData?.premium) {
       toast({
         title: "Recurso Premium",
         description: "Upload de logo é exclusivo para usuários premium.",
@@ -197,8 +198,8 @@ const UserProfile = () => {
         const base64 = e.target?.result as string;
         
         try {
-          // Salvar no Firebase como logoBase64
-          await firestoreService.updateUserField(user.id, 'logoBase64', base64);
+          // Salvar no Firebase como logobase64
+          await firestoreService.updateUserField(user.id, 'logobase64', base64);
           
           toast({
             title: "Logo Atualizada",
@@ -232,7 +233,7 @@ const UserProfile = () => {
 
     setIsLoading(true);
     try {
-      await firestoreService.updateUserField(user.id, 'logoBase64', '');
+      await firestoreService.updateUserField(user.id, 'logobase64', '');
       toast({
         title: "Logo Removida",
         description: "Logo da empresa foi removida com sucesso.",
@@ -391,17 +392,17 @@ const UserProfile = () => {
               </div>
 
               {/* Logo da Empresa - apenas para usuários premium */}
-              {userData?.isPremium && isEditing && (
+              {userData?.premium && isEditing && (
                 <div className="space-y-2">
                   <Label>Logo da Empresa</Label>
-                  {userData?.logoBase64 ? (
+                  {userData?.logobase64 ? (
                     <div 
                       className="relative inline-block"
                       onMouseEnter={() => setLogoHover(true)}
                       onMouseLeave={() => setLogoHover(false)}
                     >
                       <img 
-                        src={userData.logoBase64} 
+                        src={userData.logobase64} 
                         alt="Logo da empresa" 
                         className="h-20 w-auto border rounded-lg"
                       />
