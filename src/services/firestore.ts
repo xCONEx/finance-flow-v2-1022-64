@@ -97,60 +97,40 @@ export const firestoreService = {
 
   async getUserAgency(uid: string) {
     try {
-      console.log('🏢 Verificando agência do usuário:', uid);
-      
-      // Primeiro buscar se o usuário é dono de alguma agência
+      console.log('Verificando agência do usuário:', uid);
       const agenciasRef = collection(db, 'agencias');
-      const ownerQuery = query(agenciasRef, where('ownerUID', '==', uid));
-      
-      try {
-        const ownerSnapshot = await getDocs(ownerQuery);
-        if (!ownerSnapshot.empty) {
-          const agencyDoc = ownerSnapshot.docs[0];
-          console.log('✅ Agência encontrada como dono:', agencyDoc.id);
-          return { id: agencyDoc.id, ...agencyDoc.data() };
-        }
-      } catch (error) {
-        console.log('⚠️ Erro ao buscar como dono (pode ser limitação de permissão):', error);
+      const q = query(agenciasRef, where('colaboradores', 'array-contains', uid));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const agencyDoc = snapshot.docs[0];
+        console.log('Agência encontrada:', agencyDoc.id);
+        return { id: agencyDoc.id, ...agencyDoc.data() };
+      } else {
+        console.log('Usuário não pertence a nenhuma agência');
+        return null;
       }
-
-      // Buscar se é colaborador (array contains)
-      try {
-        const collabQuery = query(agenciasRef, where('colaboradores', 'array-contains', uid));
-        const collabSnapshot = await getDocs(collabQuery);
-
-        if (!collabSnapshot.empty) {
-          const agencyDoc = collabSnapshot.docs[0];
-          console.log('✅ Agência encontrada como colaborador:', agencyDoc.id);
-          return { id: agencyDoc.id, ...agencyDoc.data() };
-        }
-      } catch (error) {
-        console.log('⚠️ Erro ao buscar como colaborador (pode ser limitação de permissão):', error);
-      }
-
-      console.log('👤 Usuário não pertence a nenhuma agência');
-      return null;
     } catch (error) {
-      console.error('❌ Erro geral ao verificar agência:', error);
-      return null; // Retornar null em vez de throw para não quebrar o fluxo
+      console.error('Erro ao verificar agência:', error);
+      throw error;
     }
   },
 
-  async getAgencyData(agencyId: string) {
+  async getAllAgencies() {
     try {
-      console.log('🏢 Buscando dados da agência:', agencyId);
-      const agencyRef = doc(db, 'agencias', agencyId);
-      const agencyDoc = await getDoc(agencyRef);
+      console.log('🏢 Buscando todas as agências...');
+      const agenciasRef = collection(db, 'agencias');
+      const snapshot = await getDocs(agenciasRef);
       
-      if (agencyDoc.exists()) {
-        console.log('✅ Dados da agência encontrados');
-        return { id: agencyDoc.id, ...agencyDoc.data() };
-      }
+      const agencies = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       
-      console.log('❌ Agência não encontrada');
-      return null;
+      console.log('✅ Agências encontradas:', agencies.length);
+      return agencies;
     } catch (error) {
-      console.error('❌ Erro ao buscar dados da agência:', error);
+      console.error('❌ Erro ao buscar agências:', error);
       throw error;
     }
   },
@@ -194,13 +174,11 @@ export const firestoreService = {
 
   async sendInvite(inviteData: any) {
     try {
-      console.log('📧 Enviando convite (requer Admin ou Owner):', inviteData);
-      const invitesRef = collection(db, 'invites');
+      console.log('📧 Enviando convite:', inviteData);
+      const invitesRef = collection(db, 'convites');
       
       const newInvite = {
         ...inviteData,
-        agenciaId: inviteData.companyId,
-        email: inviteData.email,
         sentAt: serverTimestamp(),
         createdAt: serverTimestamp()
       };
@@ -209,16 +187,16 @@ export const firestoreService = {
       console.log('✅ Convite enviado com ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('❌ Erro ao enviar convite (pode ser limitação de permissão):', error);
+      console.error('❌ Erro ao enviar convite:', error);
       throw error;
     }
   },
 
   async getCompanyInvites(companyId: string) {
     try {
-      console.log('📋 Buscando convites da empresa (requer Admin ou Owner):', companyId);
-      const invitesRef = collection(db, 'invites');
-      const q = query(invitesRef, where('agenciaId', '==', companyId));
+      console.log('📋 Buscando convites da empresa:', companyId);
+      const invitesRef = collection(db, 'convites');
+      const q = query(invitesRef, where('companyId', '==', companyId));
       const snapshot = await getDocs(q);
       
       const invites = snapshot.docs.map(doc => ({
@@ -229,14 +207,14 @@ export const firestoreService = {
       console.log('✅ Convites encontrados:', invites.length);
       return invites;
     } catch (error) {
-      console.error('❌ Erro ao buscar convites (pode ser limitação de permissão):', error);
+      console.error('❌ Erro ao buscar convites:', error);
       throw error;
     }
   },
 
   async removeCompanyMember(companyId: string, memberId: string) {
     try {
-      console.log('👥 Removendo membro da empresa (requer Admin ou Owner):', { companyId, memberId });
+      console.log('👥 Removendo membro da empresa:', { companyId, memberId });
       const agencyRef = doc(db, 'agencias', companyId);
       const agencyDoc = await getDoc(agencyRef);
       
@@ -244,8 +222,7 @@ export const firestoreService = {
         const data = agencyDoc.data();
         const colaboradores = data.colaboradores || [];
         
-        // Filtrar o UID do colaborador
-        const updatedColaboradores = colaboradores.filter(uid => uid !== memberId);
+        const updatedColaboradores = colaboradores.filter(colab => colab.uid !== memberId);
         
         await updateDoc(agencyRef, {
           colaboradores: updatedColaboradores,
@@ -255,7 +232,7 @@ export const firestoreService = {
         console.log('✅ Membro removido com sucesso');
       }
     } catch (error) {
-      console.error('❌ Erro ao remover membro (pode ser limitação de permissão):', error);
+      console.error('❌ Erro ao remover membro:', error);
       throw error;
     }
   },
@@ -277,9 +254,28 @@ export const firestoreService = {
     }
   },
 
+  async getAgencyData(agencyId: string) {
+    try {
+      console.log('🏢 Buscando dados da agência:', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+      
+      if (agencyDoc.exists()) {
+        console.log('✅ Dados da agência encontrados');
+        return { id: agencyDoc.id, ...agencyDoc.data() };
+      }
+      
+      console.log('❌ Agência não encontrada');
+      return null;
+    } catch (error) {
+      console.error('❌ Erro ao buscar dados da agência:', error);
+      throw error;
+    }
+  },
+
   async getAllUsers() {
     try {
-      console.log('👥 [ADMIN] Buscando todos os usuários...');
+      console.log('👥 Buscando todos os usuários...');
       const usersRef = collection(db, 'usuarios');
       const snapshot = await getDocs(usersRef);
       
@@ -291,14 +287,14 @@ export const firestoreService = {
       console.log('✅ Usuários encontrados:', users.length);
       return users;
     } catch (error) {
-      console.error('❌ Erro ao buscar usuários (pode não ser admin):', error);
+      console.error('❌ Erro ao buscar usuários:', error);
       throw error;
     }
   },
 
   async getAllCompanies() {
     try {
-      console.log('🏢 [ADMIN] Buscando todas as empresas...');
+      console.log('🏢 Buscando todas as empresas...');
       const companiesRef = collection(db, 'agencias');
       const snapshot = await getDocs(companiesRef);
       
@@ -310,14 +306,14 @@ export const firestoreService = {
       console.log('✅ Empresas encontradas:', companies.length);
       return companies;
     } catch (error) {
-      console.error('❌ Erro ao buscar empresas (pode não ser admin):', error);
+      console.error('❌ Erro ao buscar empresas:', error);
       throw error;
     }
   },
 
   async getAnalyticsData() {
     try {
-      console.log('📊 [ADMIN] Calculando dados de analytics...');
+      console.log('📊 Calculando dados de analytics...');
       
       const [users, companies] = await Promise.all([
         this.getAllUsers(),
@@ -406,7 +402,7 @@ export const firestoreService = {
 
   async createCompany(companyData: any) {
     try {
-      console.log('🏢 Criando nova empresa (requer Admin):', companyData.name);
+      console.log('🏢 Criando nova empresa:', companyData.name);
       const companiesRef = collection(db, 'agencias');
       
       const newCompany = {
@@ -418,14 +414,14 @@ export const firestoreService = {
       console.log('✅ Empresa criada com ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('❌ Erro ao criar empresa (pode não ser admin):', error);
+      console.error('❌ Erro ao criar empresa:', error);
       throw error;
     }
   },
 
   async updateCompanyField(companyId: string, field: string, value: any) {
     try {
-      console.log(`💾 Atualizando ${field} da empresa ${companyId} (requer Admin)`);
+      console.log(`💾 Atualizando ${field} da empresa ${companyId}`);
       const companyRef = doc(db, 'agencias', companyId);
       await updateDoc(companyRef, {
         [field]: value,
@@ -433,7 +429,7 @@ export const firestoreService = {
       });
       console.log('✅ Campo da empresa atualizado');
     } catch (error) {
-      console.error('❌ Erro ao atualizar campo da empresa (pode não ser admin):', error);
+      console.error('❌ Erro ao atualizar campo da empresa:', error);
       throw error;
     }
   },
@@ -441,10 +437,10 @@ export const firestoreService = {
   async getUserInvites(userEmail: string) {
     try {
       console.log('📨 Buscando convites para:', userEmail);
-      const invitesRef = collection(db, 'invites');
+      const invitesRef = collection(db, 'convites');
       const q = query(
         invitesRef, 
-        where('email', '==', userEmail),
+        where('invitedEmail', '==', userEmail),
         where('status', '==', 'pending')
       );
       const snapshot = await getDocs(q);
@@ -458,7 +454,7 @@ export const firestoreService = {
       return invites;
     } catch (error) {
       console.error('❌ Erro ao buscar convites:', error);
-      return []; // Retornar array vazio em vez de throw
+      throw error;
     }
   },
 
@@ -469,18 +465,24 @@ export const firestoreService = {
       // Atualizar status do convite
       await this.updateInviteStatus(inviteId, 'accepted');
       
-      // Adicionar usuário à empresa como colaborador
+      // Adicionar usuário à empresa
       const companyData = await this.getAgencyData(companyId);
-      if (companyData) {
-        const colaboradores = companyData.colaboradores || [];
-        
-        if (!colaboradores.includes(userId)) {
-          const updatedCollaborators = [...colaboradores, userId];
+      if (companyData && companyData.colaboradores) {
+        const userData = await this.getUserData(userId);
+        if (userData) {
+          const newCollaborator = {
+            uid: userId,
+            email: userData.email,
+            role: 'employee'
+          };
+          
+          const updatedCollaborators = [...companyData.colaboradores, newCollaborator];
           await this.updateCompanyField(companyId, 'colaboradores', updatedCollaborators);
+          
+          // Atualizar tipo do usuário
+          await this.updateUserField(userId, 'userType', 'employee');
+          await this.updateUserField(userId, 'companyId', companyId);
         }
-        
-        await this.updateUserField(userId, 'userType', 'employee');
-        await this.updateUserField(userId, 'companyId', companyId);
       }
       
       console.log('✅ Convite aceito com sucesso');
@@ -493,7 +495,7 @@ export const firestoreService = {
   async updateInviteStatus(inviteId: string, status: string) {
     try {
       console.log('📝 Atualizando status do convite:', inviteId, status);
-      const inviteRef = doc(db, 'invites', inviteId);
+      const inviteRef = doc(db, 'convites', inviteId);
       await updateDoc(inviteRef, {
         status,
         updatedAt: serverTimestamp()

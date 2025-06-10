@@ -13,8 +13,7 @@ import {
   UserCheck, 
   Building2,
   Crown,
-  Send,
-  Shield
+  Send
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,56 +37,13 @@ const CompanyDashboard = () => {
     try {
       console.log('Carregando dados da empresa...');
       
-      // Carregar colaboradores - agora são apenas UIDs
-      const colaboradoresUIDs = agencyData.colaboradores || [];
-      const membersData = [];
-      
-      // Buscar dados de cada colaborador
-      for (const uid of colaboradoresUIDs) {
-        try {
-          const userData = await firestoreService.getUserData(uid);
-          if (userData) {
-            membersData.push({
-              uid: uid,
-              name: userData.name || 'Nome não informado',
-              email: userData.email,
-              role: 'Colaborador'
-            });
-          }
-        } catch (error) {
-          console.error('Erro ao buscar dados do colaborador:', uid, error);
-        }
-      }
-      
-      // Adicionar o dono da empresa
-      if (agencyData.ownerUID) {
-        try {
-          const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
-          if (ownerData) {
-            membersData.unshift({
-              uid: agencyData.ownerUID,
-              name: ownerData.name || 'Nome não informado',
-              email: ownerData.email,
-              role: 'Proprietário'
-            });
-          }
-        } catch (error) {
-          console.error('Erro ao buscar dados do proprietário:', error);
-        }
-      }
-      
-      setTeamMembers(membersData);
+      // Carregar membros da equipe
+      const members = agencyData.colaboradores || [];
+      setTeamMembers(members);
 
-      // Carregar convites pendentes (apenas para Admin e Owner)
-      if (isAdmin || isOwner) {
-        try {
-          const invites = await firestoreService.getCompanyInvites(agencyData.id);
-          setPendingInvites(invites);
-        } catch (error) {
-          console.error('Erro ao carregar convites:', error);
-          setPendingInvites([]);
-        }
-      }
+      // Carregar convites pendentes
+      const invites = await firestoreService.getCompanyInvites(agencyData.id);
+      setPendingInvites(invites);
     } catch (error) {
       console.error('Erro ao carregar dados da empresa:', error);
     }
@@ -135,15 +91,6 @@ const CompanyDashboard = () => {
   };
 
   const handleRemoveMember = async (memberId) => {
-    if (memberId === agencyData?.ownerUID) {
-      toast({
-        title: "Erro",
-        description: "Não é possível remover o proprietário da empresa",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
       console.log('Removendo membro:', memberId);
       
@@ -164,74 +111,7 @@ const CompanyDashboard = () => {
     }
   };
 
-  // Definir permissões baseadas no tipo de usuário e novas regras
-  const isAdmin = user?.userType === 'admin';
-  const isOwner = user?.id === agencyData?.ownerUID;
-  const isEmployee = user?.userType === 'employee' && !isOwner && !isAdmin;
-  
-  // Permissões específicas conforme as novas regras
-  const canInviteMembers = isAdmin || isOwner; // Admin ou Owner podem convidar
-  const canRemoveMembers = isAdmin || isOwner; // Admin ou Owner podem remover
-  const canViewInvites = isAdmin || isOwner; // Admin ou Owner podem ver convites
-  const canEditCompany = isAdmin; // APENAS Admin pode editar dados da empresa
-
-  // Se for colaborador, mostrar interface limitada
-  if (isEmployee) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
-            <Building2 className="text-purple-600" />
-            {agencyData?.name || 'Sua Empresa'}
-          </h2>
-          <p className="text-gray-600">Visualização da equipe - Colaborador</p>
-        </div>
-
-        {/* Estatísticas Limitadas para Colaboradores */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Users className="h-8 w-8 mx-auto text-blue-600 mb-2" />
-              <p className="text-2xl font-bold">{teamMembers.length}</p>
-              <p className="text-sm text-gray-600">Membros da Equipe</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4 text-center">
-              <UserCheck className="h-8 w-8 mx-auto text-green-600 mb-2" />
-              <p className="text-sm font-medium">Colaborador</p>
-              <p className="text-xs text-gray-600">Seu Papel</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lista de Membros - Apenas Visualização */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Membros da Equipe</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {teamMembers.map((member) => (
-                <div key={member.uid} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <h4 className="font-medium">{member.name || member.email}</h4>
-                    <p className="text-sm text-gray-600">{member.email}</p>
-                    <div className="flex gap-2 mt-2">
-                      <Badge variant="outline">{member.role || 'Colaborador'}</Badge>
-                      <Badge variant="secondary">Ativo</Badge>
-                    </div>
-                  </div>
-                  {/* Colaboradores não podem remover membros */}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const isOwner = user?.userType === 'company_owner';
 
   return (
     <div className="space-y-6">
@@ -239,17 +119,8 @@ const CompanyDashboard = () => {
         <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
           <Building2 className="text-purple-600" />
           {agencyData?.name || 'Sua Empresa'}
-          {isAdmin && <Shield className="h-6 w-6 text-yellow-600" />}
-          {isOwner && <Crown className="h-6 w-6 text-yellow-600" />}
         </h2>
-        <p className="text-gray-600">
-          {isAdmin ? 'Gestão administrativa da empresa' : 'Gestão de equipe e colaboradores'}
-        </p>
-        {!canEditCompany && isOwner && (
-          <p className="text-sm text-amber-600">
-            ⚠️ Apenas administradores podem editar dados da empresa
-          </p>
-        )}
+        <p className="text-gray-600">Gestão de equipe e colaboradores</p>
       </div>
 
       {/* Estatísticas da Empresa */}
@@ -262,42 +133,34 @@ const CompanyDashboard = () => {
           </CardContent>
         </Card>
         
-        {canViewInvites && (
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Mail className="h-8 w-8 mx-auto text-orange-600 mb-2" />
-              <p className="text-2xl font-bold">{pendingInvites.length}</p>
-              <p className="text-sm text-gray-600">Convites Pendentes</p>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardContent className="p-4 text-center">
+            <Mail className="h-8 w-8 mx-auto text-orange-600 mb-2" />
+            <p className="text-2xl font-bold">{pendingInvites.length}</p>
+            <p className="text-sm text-gray-600">Convites Pendentes</p>
+          </CardContent>
+        </Card>
         
         <Card>
           <CardContent className="p-4 text-center">
-            {isAdmin ? (
-              <Shield className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
-            ) : (
-              <Crown className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
-            )}
-            <p className="text-sm font-medium">
-              {isAdmin ? 'Administrador' : isOwner ? 'Proprietário' : 'Colaborador'}
-            </p>
+            <Crown className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
+            <p className="text-sm font-medium">{isOwner ? 'Proprietário' : 'Colaborador'}</p>
             <p className="text-xs text-gray-600">Seu Papel</p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="team" className="space-y-4">
-        <TabsList className={`grid w-full ${canViewInvites ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="team">Equipe</TabsTrigger>
-          {canViewInvites && <TabsTrigger value="invites">Convites</TabsTrigger>}
+          <TabsTrigger value="invites">Convites</TabsTrigger>
         </TabsList>
 
         <TabsContent value="team" className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Membros da Equipe</CardTitle>
-              {canInviteMembers && (
+              {isOwner && (
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button>
@@ -336,7 +199,7 @@ const CompanyDashboard = () => {
                         <Badge variant="secondary">Ativo</Badge>
                       </div>
                     </div>
-                    {canRemoveMembers && member.uid !== agencyData?.ownerUID && (
+                    {isOwner && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -352,42 +215,40 @@ const CompanyDashboard = () => {
           </Card>
         </TabsContent>
 
-        {canViewInvites && (
-          <TabsContent value="invites" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Convites Pendentes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {pendingInvites.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Mail className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                      <p className="text-gray-600">Nenhum convite pendente</p>
-                    </div>
-                  ) : (
-                    pendingInvites.map((invite) => (
-                      <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
-                          <h4 className="font-medium">{invite.email}</h4>
-                          <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt).toLocaleDateString()}</p>
-                          <Badge variant="outline" className="mt-2">
-                            {invite.status === 'pending' ? 'Aguardando' : invite.status}
-                          </Badge>
-                        </div>
-                        {canInviteMembers && (
-                          <Button variant="outline" size="sm">
-                            Reenviar
-                          </Button>
-                        )}
+        <TabsContent value="invites" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Convites Pendentes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {pendingInvites.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Mail className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600">Nenhum convite pendente</p>
+                  </div>
+                ) : (
+                  pendingInvites.map((invite) => (
+                    <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <h4 className="font-medium">{invite.email}</h4>
+                        <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt).toLocaleDateString()}</p>
+                        <Badge variant="outline" className="mt-2">
+                          {invite.status === 'pending' ? 'Aguardando' : invite.status}
+                        </Badge>
                       </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+                      {isOwner && (
+                        <Button variant="outline" size="sm">
+                          Reenviar
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );

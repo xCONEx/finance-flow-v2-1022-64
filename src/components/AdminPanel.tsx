@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -160,7 +159,7 @@ const AdminPanel = () => {
     }
 
     try {
-      console.log('[ADMIN] Criando empresa:', newCompanyName, newCompanyOwnerEmail);
+      console.log('Criando empresa:', newCompanyName, newCompanyOwnerEmail);
       
       const owner = users.find(user => user.email === newCompanyOwnerEmail);
       if (!owner) {
@@ -172,31 +171,28 @@ const AdminPanel = () => {
         return;
       }
 
-      // Criar empresa com estrutura correta
       const companyData = {
         name: newCompanyName,
         ownerUID: owner.id,
-        colaboradores: [owner.id], // Array de UIDs
+        colaboradores: [{ uid: owner.id, email: owner.email, role: 'owner' }],
         equipments: [],
         expenses: [],
         jobs: [],
-        plan: 'premium', // Empresas começam com plano premium
         createdAt: new Date().toISOString()
       };
       
       const companyId = await firestoreService.createCompany(companyData);
       
-      // Atualizar usuário para company_owner
       await firestoreService.updateUserField(owner.id, 'userType', 'company_owner');
       await firestoreService.updateUserField(owner.id, 'companyId', companyId);
       
       setNewCompanyName('');
       setNewCompanyOwnerEmail('');
-      await loadData(); // Recarregar dados
+      await loadData();
       
       toast({
         title: "Sucesso",
-        description: `Empresa "${newCompanyName}" criada com sucesso`
+        description: "Empresa criada com sucesso"
       });
     } catch (error) {
       console.error('Erro ao criar empresa:', error);
@@ -208,9 +204,11 @@ const AdminPanel = () => {
     }
   };
 
+  // CORRIGIDO: Função para editar empresa agora usa o método correto
   const handleEditCompany = async (companyId, newData) => {
     try {
-      console.log('[ADMIN] Editando empresa:', companyId, newData);
+      console.log('Editando empresa:', companyId, newData);
+      // Usar o método correto para atualizar empresa, não usuário
       await firestoreService.updateCompanyField(companyId, 'name', newData.name);
       
       setCompanies(companies.map(company => 
@@ -244,7 +242,7 @@ const AdminPanel = () => {
     }
 
     try {
-      console.log('[ADMIN] Adicionando administrador:', newAdminEmail);
+      console.log('Adicionando administrador:', newAdminEmail);
       
       const user = users.find(u => u.email === newAdminEmail);
       if (!user) {
@@ -306,13 +304,9 @@ const AdminPanel = () => {
           Painel Administrativo
         </h2>
         <p className="text-gray-600">Gestão completa da plataforma FinanceFlow</p>
-        <Badge variant="destructive" className="bg-red-600">
-          <Shield className="h-4 w-4 mr-1" />
-          ACESSO RESTRITO - APENAS ADMINISTRADORES
-        </Badge>
       </div>
 
-      {/* Estatísticas Gerais */}
+      {/* Estatísticas Gerais - ADICIONADAS métricas por plano */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -347,7 +341,7 @@ const AdminPanel = () => {
         </Card>
       </div>
 
-      {/* Métricas por Plano */}
+      {/* NOVA seção: Métricas por Plano */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -446,30 +440,17 @@ const AdminPanel = () => {
         <TabsContent value="companies" className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Gestão de Empresas
-                </CardTitle>
-                <p className="text-sm text-gray-600 mt-1">
-                  <Shield className="h-4 w-4 inline mr-1" />
-                  Apenas administradores podem criar e editar empresas
-                </p>
-              </div>
+              <CardTitle>Gestão de Empresas</CardTitle>
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button className="bg-red-600 hover:bg-red-700">
+                  <Button>
                     <Plus className="h-4 w-4 mr-2" />
                     Nova Empresa
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <Shield className="h-5 w-5 text-red-600" />
-                      Criar Nova Empresa
-                    </DialogTitle>
-                    <p className="text-sm text-gray-600">Ação restrita a administradores</p>
+                    <DialogTitle>Criar Nova Empresa</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
@@ -491,8 +472,7 @@ const AdminPanel = () => {
                         placeholder="Digite o email do proprietário"
                       />
                     </div>
-                    <Button onClick={handleCreateCompany} className="w-full bg-red-600 hover:bg-red-700">
-                      <Shield className="h-4 w-4 mr-2" />
+                    <Button onClick={handleCreateCompany} className="w-full">
                       Criar Empresa
                     </Button>
                   </div>
@@ -515,17 +495,13 @@ const AdminPanel = () => {
                       <div className="flex gap-2">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="border-red-200 hover:bg-red-50">
+                            <Button variant="outline" size="sm">
                               <Edit className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle className="flex items-center gap-2">
-                                <Shield className="h-5 w-5 text-red-600" />
-                                Editar Empresa
-                              </DialogTitle>
-                              <p className="text-sm text-gray-600">Ação restrita a administradores</p>
+                              <DialogTitle>Editar Empresa</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4">
                               <div>
@@ -537,9 +513,8 @@ const AdminPanel = () => {
                               </div>
                               <Button 
                                 onClick={() => handleEditCompany(company.id, editingCompany)}
-                                className="w-full bg-red-600 hover:bg-red-700"
+                                className="w-full"
                               >
-                                <Shield className="h-4 w-4 mr-2" />
                                 Salvar Alterações
                               </Button>
                             </div>
@@ -559,10 +534,10 @@ const AdminPanel = () => {
                     {showCompanyMembers[company.id] && (
                       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                         <h5 className="font-medium mb-2">Membros da Equipe:</h5>
-                        {company.colaboradores?.map((memberUID, index) => (
+                        {company.colaboradores?.map((member, index) => (
                           <div key={index} className="flex justify-between items-center py-1">
-                            <span className="text-sm">{memberUID}</span>
-                            <Badge variant="outline">Membro</Badge>
+                            <span className="text-sm">{member.email}</span>
+                            <Badge variant="outline">{member.role}</Badge>
                           </div>
                         )) || <p className="text-sm text-gray-500">Nenhum membro encontrado</p>}
                       </div>

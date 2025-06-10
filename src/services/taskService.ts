@@ -18,7 +18,7 @@ export const taskService = {
     try {
       console.log('📋 Buscando tasks do usuário:', userId);
       const tasksRef = collection(db, 'tasks');
-      const q = query(tasksRef, where('ownerUID', '==', userId));
+      const q = query(tasksRef, where('userId', '==', userId));
       const snapshot = await getDocs(q);
       
       const tasks = snapshot.docs.map(doc => ({
@@ -46,7 +46,7 @@ export const taskService = {
         priority: task.priority,
         status: task.status,
         completed: task.completed,
-        ownerUID: task.userId, // Usar ownerUID para as regras do Firestore
+        userId: task.userId,
         createdAt: serverTimestamp()
       };
 
