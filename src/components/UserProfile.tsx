@@ -341,128 +341,134 @@ const UserProfile = () => {
             {/* User Info Form */}
             <div className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome Completo</Label>
-                  {isEditing ? (
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
-                      placeholder="Digite seu nome completo"
-                    />
-                  ) : (
-                    <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.name || 'Não informado'}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.email}</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="company">Empresa</Label>
-                  {isInCompany ? (
-                    <div className="space-y-1">
-                      <p className="text-sm py-2 px-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded font-medium text-blue-700 dark:text-blue-300">
-                        {companyName}
-                      </p>
-                      <p className="text-xs text-gray-500">Você faz parte desta empresa</p>
-                    </div>
-                  ) : (
-                    isEditing ? (
+                {/* Coluna Esquerda */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome Completo</Label>
+                    {isEditing ? (
                       <Input
-                        id="company"
-                        value={formData.company}
-                        onChange={(e) => handleInputChange('company', e.target.value)}
-                        placeholder="Nome da empresa"
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        placeholder="Digite seu nome completo"
                       />
                     ) : (
-                      <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.company || 'Não informado'}</p>
-                    )
-                  )}
-                </div>
+                      <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.name || 'Não informado'}</p>
+                    )}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Tipo de Usuário</Label>
-                  <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
-                    {user?.userType === 'admin' && 'Administrador do Sistema'}
-                    {user?.userType === 'company_owner' && 'Dono da Empresa'}
-                    {user?.userType === 'employee' && 'Colaborador'}
-                    {user?.userType === 'individual' && 'Usuário Individual'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Logo da Empresa - apenas para usuários premium */}
-              {isPremium && isEditing && (
-                <div className="space-y-2">
-                  <Label>Logo da Empresa</Label>
-                  {userData?.logobase64 ? (
-                    <div 
-                      className="relative inline-block"
-                      onMouseEnter={() => setLogoHover(true)}
-                      onMouseLeave={() => setLogoHover(false)}
-                    >
-                      <img 
-                        src={userData.logobase64} 
-                        alt="Logo da empresa" 
-                        className="h-20 w-auto border rounded-lg"
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Telefone</Label>
+                    {isEditing ? (
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        placeholder="(11) 99999-9999"
                       />
-                      {logoHover && (
-                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
-                          <Button
+                    ) : (
+                      <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.phone || 'Não informado'}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Tipo de Usuário</Label>
+                    <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
+                      {user?.userType === 'admin' && 'Administrador do Sistema'}
+                      {user?.userType === 'company_owner' && 'Dono da Empresa'}
+                      {user?.userType === 'employee' && 'Colaborador'}
+                      {user?.userType === 'individual' && 'Usuário Individual'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Coluna Direita */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail</Label>
+                    <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.email}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="company">Empresa</Label>
+                    {isInCompany ? (
+                      <div className="space-y-1">
+                        <p className="text-sm py-2 px-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded font-medium text-blue-700 dark:text-blue-300">
+                          {companyName}
+                        </p>
+                        <p className="text-xs text-gray-500">Você faz parte desta empresa</p>
+                      </div>
+                    ) : (
+                      isEditing ? (
+                        <Input
+                          id="company"
+                          value={formData.company}
+                          onChange={(e) => handleInputChange('company', e.target.value)}
+                          placeholder="Nome da empresa"
+                        />
+                      ) : (
+                        <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.company || 'Não informado'}</p>
+                      )
+                    )}
+                  </div>
+
+                  {/* Logo da Empresa - apenas para usuários premium */}
+                  {isPremium && isEditing && (
+                    <div className="space-y-2">
+                      <Label>Logo da Empresa</Label>
+                      {userData?.logobase64 ? (
+                        <div 
+                          className="relative inline-block"
+                          onMouseEnter={() => setLogoHover(true)}
+                          onMouseLeave={() => setLogoHover(false)}
+                        >
+                          <img 
+                            src={userData.logobase64} 
+                            alt="Logo da empresa" 
+                            className="h-20 w-auto border rounded-lg"
+                          />
+                          {logoHover && (
+                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={handleDeleteLogo}
+                                disabled={isLoading}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <input
+                            ref={logoInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                          />
+                          <Button 
+                            variant="outline" 
                             size="sm"
-                            variant="destructive"
-                            onClick={handleDeleteLogo}
+                            onClick={() => logoInputRef.current?.click()}
                             disabled={isLoading}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Upload className="h-4 w-4 mr-2" />
+                            {isLoading ? 'Salvando...' : 'Adicionar Logo'}
                           </Button>
+                          <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                      />
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => logoInputRef.current?.click()}
-                        disabled={isLoading}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        {isLoading ? 'Salvando...' : 'Adicionar Logo'}
-                      </Button>
-                      <p className="text-xs text-gray-500">JPG, PNG até 3MB</p>
-                    </div>
                   )}
                 </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
-                {isEditing ? (
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    placeholder="(11) 99999-9999"
-                  />
-                ) : (
-                  <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">{formData.phone || 'Não informado'}</p>
-                )}
               </div>
             </div>
 
             {/* Save Button */}
-            {isEditing && !isInCompany && (
+            {isEditing && (
               <div className="flex gap-2">
                 <Button 
                   onClick={handleSave}
