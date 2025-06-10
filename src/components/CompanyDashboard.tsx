@@ -204,7 +204,7 @@ const CompanyDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Mostrar owner primeiro */}
+                {/* Mostrar owner primeiro - CORRIGIDO: usar ownerUid */}
                 {companyData?.ownerUid && (
                   <div className="flex items-center justify-between p-4 border rounded-lg bg-yellow-50">
                     <div>

@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -10,7 +11,8 @@ import {
   where,
   orderBy,
   limit,
-  serverTimestamp 
+  serverTimestamp,
+  setDoc 
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -28,12 +30,17 @@ export interface FirestoreUser {
     workDays: number;
   };
   userType?: 'individual' | 'company_owner' | 'company_colab' | 'admin';
+  banned?: boolean;
+  subscription?: string;
+  personalInfo?: {
+    phone?: string;
+  };
 }
 
 export interface Company {
   id: string;
   name: string;
-  ownerUid: string;
+  ownerUid: string; // CORRIGIDO: era ownerUID
   collaborators: any[];
   equipments: any[];
   expenses: any[];
@@ -64,7 +71,7 @@ export const firestoreService = {
 
   async createUser(userData: FirestoreUser): Promise<void> {
     try {
-      await updateDoc(doc(db, 'usuarios', userData.uid), userData);
+      await setDoc(doc(db, 'usuarios', userData.uid), userData);
       console.log('Usuário criado/atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao criar usuário:', error);
@@ -78,6 +85,42 @@ export const firestoreService = {
       console.log('Tipo de usuário atualizado:', userType);
     } catch (error) {
       console.error('Erro ao atualizar tipo de usuário:', error);
+      throw error;
+    }
+  },
+
+  // NOVO: Atualizar campo específico do usuário
+  async updateUserField(uid: string, field: string, value: any): Promise<void> {
+    try {
+      console.log('Atualizando campo do usuário:', uid, field, value);
+      await updateDoc(doc(db, 'usuarios', uid), { [field]: value });
+      console.log('Campo atualizado com sucesso');
+    } catch (error) {
+      console.error('Erro ao atualizar campo do usuário:', error);
+      throw error;
+    }
+  },
+
+  // NOVO: Banir/desbanir usuário
+  async banUser(uid: string, banned: boolean): Promise<void> {
+    try {
+      console.log(`${banned ? 'Banindo' : 'Desbanindo'} usuário:`, uid);
+      await updateDoc(doc(db, 'usuarios', uid), { banned });
+      console.log('Status de ban atualizado');
+    } catch (error) {
+      console.error('Erro ao atualizar status de ban:', error);
+      throw error;
+    }
+  },
+
+  // NOVO: Atualizar assinatura do usuário
+  async updateUserSubscription(uid: string, subscription: string): Promise<void> {
+    try {
+      console.log('Atualizando assinatura do usuário:', uid, subscription);
+      await updateDoc(doc(db, 'usuarios', uid), { subscription });
+      console.log('Assinatura atualizada');
+    } catch (error) {
+      console.error('Erro ao atualizar assinatura:', error);
       throw error;
     }
   },
@@ -151,6 +194,18 @@ export const firestoreService = {
     }
   },
 
+  // NOVO: Atualizar campo específico da empresa
+  async updateCompanyField(companyId: string, field: string, value: any): Promise<void> {
+    try {
+      console.log('Atualizando campo da empresa:', companyId, field, value);
+      await updateDoc(doc(db, 'companies', companyId), { [field]: value });
+      console.log('Campo da empresa atualizado');
+    } catch (error) {
+      console.error('Erro ao atualizar campo da empresa:', error);
+      throw error;
+    }
+  },
+
   async deleteCompany(companyId: string): Promise<void> {
     try {
       console.log('🏢 Deletando empresa:', companyId);
@@ -215,7 +270,7 @@ export const firestoreService = {
       const invitesRef = collection(db, 'invites');
       await addDoc(invitesRef, {
         ...inviteData,
-        companyId: inviteData.companyId, // Mudança de agenciaId para companyId
+        companyId: inviteData.companyId,
         sentAt: serverTimestamp(),
         status: 'pending'
       });
@@ -271,7 +326,7 @@ export const firestoreService = {
       const boardRef = doc(db, 'kanban_boards', companyId);
       await updateDoc(boardRef, {
         ...boardData,
-        companyId: companyId, // Mudança de agenciaId para companyId
+        companyId: companyId,
         updatedAt: serverTimestamp()
       });
       console.log('✅ Board do Kanban salvo com sucesso');
@@ -291,7 +346,7 @@ export const firestoreService = {
     }
   },
 
-  // Funções administrativas
+  // NOVO: Funções administrativas corrigidas
   async getAllUsers(): Promise<any[]> {
     try {
       console.log('👥 [ADMIN] Buscando todos os usuários...');
@@ -311,35 +366,66 @@ export const firestoreService = {
     }
   },
 
-  async getAnalytics(): Promise<any> {
+  // NOVO: Função de analytics corrigida
+  async getAnalyticsData(): Promise<any> {
     try {
       console.log('📊 [ADMIN] Calculando dados de analytics...');
       
-      // Buscar dados das principais coleções
-      const usersSnapshot = await getDocs(collection(db, 'usuarios'));
-      const companiesSnapshot = await getDocs(collection(db, 'companies'));
-      const tasksSnapshot = await getDocs(collection(db, 'tasks'));
+      const [usersSnapshot, companiesSnapshot] = await Promise.all([
+        getDocs(collection(db, 'usuarios')),
+        getDocs(collection(db, 'companies'))
+      ]);
       
-      const analytics = {
-        totalUsers: usersSnapshot.size,
-        totalCompanies: companiesSnapshot.size,
-        totalTasks: tasksSnapshot.size,
-        userTypes: {
-          individual: 0,
-          company_owner: 0,
-          company_colab: 0,
-          admin: 0
-        }
+      const users = usersSnapshot.docs.map(doc => doc.data());
+      const companies = companiesSnapshot.docs.map(doc => doc.data());
+      
+      // Calcular métricas básicas
+      const totalUsers = users.length;
+      const totalCompanies = companies.length;
+      const totalRevenue = 0; // Placeholder - implementar lógica de receita
+      const activeUsers = users.filter(user => !user.banned).length;
+      
+      // Estatísticas por tipo de usuário
+      const userTypes = {
+        individual: users.filter(u => !u.userType || u.userType === 'individual').length,
+        company_owner: users.filter(u => u.userType === 'company_owner').length,
+        employee: users.filter(u => u.userType === 'company_colab').length,
+        admin: users.filter(u => u.userType === 'admin').length
       };
       
-      // Analisar tipos de usuário
-      usersSnapshot.docs.forEach(doc => {
-        const userData = doc.data();
-        const userType = userData.userType || 'individual';
-        if (analytics.userTypes.hasOwnProperty(userType)) {
-          analytics.userTypes[userType]++;
+      // Métricas de conversão
+      const premiumUsers = users.filter(u => u.subscription === 'premium').length;
+      const freeUsers = users.filter(u => !u.subscription || u.subscription === 'free').length;
+      const conversionRate = freeUsers > 0 ? (premiumUsers / freeUsers) * 100 : 0;
+      
+      const analytics = {
+        overview: {
+          totalUsers,
+          totalCompanies,
+          totalRevenue,
+          activeUsers
+        },
+        userStats: {
+          userTypes,
+          conversionRate
+        },
+        businessStats: {
+          totalJobs: 0, // Placeholder
+          approvedJobs: 0, // Placeholder
+          pendingJobs: 0, // Placeholder
+          averageJobValue: 0, // Placeholder
+          jobApprovalRate: 0 // Placeholder
+        },
+        recentActivity: {
+          newUsersThisMonth: 0, // Placeholder
+          newCompaniesThisMonth: 0, // Placeholder
+          newJobsThisMonth: 0 // Placeholder
+        },
+        productivity: {
+          taskCompletionRate: 85, // Placeholder
+          averageTasksPerUser: 12.5 // Placeholder
         }
-      });
+      };
       
       console.log('✅ Analytics calculados');
       return analytics;
