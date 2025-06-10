@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,9 +36,45 @@ const CompanyDashboard = () => {
     try {
       console.log('Carregando dados da empresa...');
       
-      // Carregar membros da equipe
-      const members = agencyData.colaboradores || [];
-      setTeamMembers(members);
+      // Carregar colaboradores - agora são apenas UIDs
+      const colaboradoresUIDs = agencyData.colaboradores || [];
+      const membersData = [];
+      
+      // Buscar dados de cada colaborador
+      for (const uid of colaboradoresUIDs) {
+        try {
+          const userData = await firestoreService.getUserData(uid);
+          if (userData) {
+            membersData.push({
+              uid: uid,
+              name: userData.name || 'Nome não informado',
+              email: userData.email,
+              role: 'Colaborador'
+            });
+          }
+        } catch (error) {
+          console.error('Erro ao buscar dados do colaborador:', uid, error);
+        }
+      }
+      
+      // Adicionar o dono da empresa
+      if (agencyData.ownerUID) {
+        try {
+          const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
+          if (ownerData) {
+            membersData.unshift({
+              uid: agencyData.ownerUID,
+              name: ownerData.name || 'Nome não informado',
+              email: ownerData.email,
+              role: 'Proprietário'
+            });
+          }
+        } catch (error) {
+          console.error('Erro ao buscar dados do proprietário:', error);
+        }
+      }
+      
+      setTeamMembers(membersData);
 
       // Carregar convites pendentes
       const invites = await firestoreService.getCompanyInvites(agencyData.id);
@@ -91,6 +126,15 @@ const CompanyDashboard = () => {
   };
 
   const handleRemoveMember = async (memberId) => {
+    if (memberId === agencyData?.ownerUID) {
+      toast({
+        title: "Erro",
+        description: "Não é possível remover o proprietário da empresa",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       console.log('Removendo membro:', memberId);
       
@@ -111,7 +155,7 @@ const CompanyDashboard = () => {
     }
   };
 
-  const isOwner = user?.userType === 'company_owner';
+  const isOwner = user?.uid === agencyData?.ownerUID;
 
   return (
     <div className="space-y-6">
