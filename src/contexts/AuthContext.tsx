@@ -21,6 +21,7 @@ interface AuthContextType {
   loading: boolean;
   userData: FirestoreUser | null;
   agencyData: any | null;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +39,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<FirestoreUser | null>(null);
   const [agencyData, setAgencyData] = useState<any | null>(null);
+
+  const refreshUserData = async () => {
+    if (!user?.id) return;
+    
+    try {
+      console.log('🔄 Atualizando dados do usuário...');
+      
+      // Recarregar dados do usuário
+      const updatedUserData = await firestoreService.getUserData(user.id);
+      if (updatedUserData) {
+        setUserData(updatedUserData);
+        console.log('✅ Dados do usuário atualizados');
+      }
+      
+      // Recarregar dados da agência se aplicável
+      if (user.userType === 'company_owner' || user.userType === 'employee') {
+        const allAgencies = await firestoreService.getAllAgencies();
+        
+        for (const agency of allAgencies) {
+          const agencyData = agency as any;
+          
+          const isOwner = (
+            (agencyData.ownerId && agencyData.ownerId === user.id) ||
+            (agencyData.ownerUID && agencyData.ownerUID === user.id) ||
+            (agencyData.owner && agencyData.owner === user.id) ||
+            (agencyData.owner && agencyData.owner === user.email) ||
+            (agencyData.ownerId && agencyData.ownerId === user.email)
+          );
+          
+          const isCollaborator = agencyData.colaboradores && Array.isArray(agencyData.colaboradores) && 
+            agencyData.colaboradores.some((colab: any) => 
+              colab.uid === user.id || colab.email === user.email
+            );
+          
+          if (isOwner || isCollaborator) {
+            setAgencyData(agencyData);
+            console.log('✅ Dados da agência atualizados');
+            break;
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao atualizar dados:', error);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -260,9 +307,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       register,
       loading,
       userData,
-      agencyData
+      agencyData,
+      refreshUserData
     }}>
       {children}
     </AuthContext.Provider>
   );
 };
+
+export default AuthProvider;

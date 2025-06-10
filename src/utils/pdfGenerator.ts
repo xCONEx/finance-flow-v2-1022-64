@@ -46,7 +46,7 @@ export const generateJobPDF = async (job: Job, userData: any) => {
     try {
       // Criar uma imagem temporária para obter dimensões
       const img = new Image();
-      img.onload = function() {
+      img.onload = function(this: HTMLImageElement) {
         const imgWidth = this.width;
         const imgHeight = this.height;
         const aspectRatio = imgWidth / imgHeight;
