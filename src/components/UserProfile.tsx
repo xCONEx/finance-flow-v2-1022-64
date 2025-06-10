@@ -39,6 +39,9 @@ const UserProfile = () => {
     }
   }, [user, userData]);
 
+  // Verificar se o usuário é premium
+  const isPremium = userData?.subscription === 'premium' || userData?.subscription === 'enterprise';
+
   // Buscar foto do Google se disponível
   const getProfileImageUrl = () => {
     // Prioridade: 1. Foto customizada 2. Foto do Google 3. Avatar padrão
@@ -161,7 +164,7 @@ const UserProfile = () => {
     if (!file || !user?.id) return;
 
     // Verificar se é usuário premium
-    if (!userData?.premium) {
+    if (!isPremium) {
       toast({
         title: "Recurso Premium",
         description: "Upload de logo é exclusivo para usuários premium.",
@@ -392,7 +395,7 @@ const UserProfile = () => {
               </div>
 
               {/* Logo da Empresa - apenas para usuários premium */}
-              {userData?.premium && isEditing && (
+              {isPremium && isEditing && (
                 <div className="space-y-2">
                   <Label>Logo da Empresa</Label>
                   {userData?.logobase64 ? (
