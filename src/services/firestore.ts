@@ -99,7 +99,7 @@ export const firestoreService = {
     try {
       console.log('Verificando agência do usuário:', uid);
       const agenciasRef = collection(db, 'agencias');
-      const q = query(agenciasRef, where('colaboradores', 'array-contains', uid));
+      const q = query(agenciasRef, where('collaborators', 'array-contains', uid));
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
@@ -138,10 +138,11 @@ export const firestoreService = {
   async saveKanbanBoard(agencyId: string, boardData: any) {
     try {
       console.log('💾 Salvando board do Kanban para agência:', agencyId);
-      const agencyRef = doc(db, 'agencias', agencyId);
+      const boardRef = doc(db, 'kanban_boards', agencyId);
       
-      await updateDoc(agencyRef, {
-        kanbanBoard: boardData,
+      await setDoc(boardRef, {
+        agencyId: agencyId,
+        ...boardData,
         updatedAt: serverTimestamp()
       });
       
@@ -155,16 +156,15 @@ export const firestoreService = {
   async getKanbanBoard(agencyId: string) {
     try {
       console.log('📦 Buscando board do Kanban para agência:', agencyId);
-      const agencyRef = doc(db, 'agencias', agencyId);
-      const agencyDoc = await getDoc(agencyRef);
+      const boardRef = doc(db, 'kanban_boards', agencyId);
+      const boardDoc = await getDoc(boardRef);
       
-      if (agencyDoc.exists()) {
-        const data = agencyDoc.data();
+      if (boardDoc.exists()) {
         console.log('✅ Board do Kanban encontrado');
-        return data.kanbanBoard || null;
+        return boardDoc.data();
       }
       
-      console.log('❌ Agência não encontrada');
+      console.log('❌ Board do Kanban não encontrado');
       return null;
     } catch (error) {
       console.error('❌ Erro ao buscar board do Kanban:', error);
@@ -175,10 +175,15 @@ export const firestoreService = {
   async sendInvite(inviteData: any) {
     try {
       console.log('📧 Enviando convite:', inviteData);
-      const invitesRef = collection(db, 'convites');
+      const invitesRef = collection(db, 'invites');
       
       const newInvite = {
-        ...inviteData,
+        email: inviteData.email,
+        agencyId: inviteData.companyId,
+        agencyName: inviteData.companyName,
+        invitedBy: inviteData.invitedBy,
+        role: inviteData.role,
+        status: 'pending',
         sentAt: serverTimestamp(),
         createdAt: serverTimestamp()
       };
@@ -195,8 +200,8 @@ export const firestoreService = {
   async getCompanyInvites(companyId: string) {
     try {
       console.log('📋 Buscando convites da empresa:', companyId);
-      const invitesRef = collection(db, 'convites');
-      const q = query(invitesRef, where('companyId', '==', companyId));
+      const invitesRef = collection(db, 'invites');
+      const q = query(invitesRef, where('agencyId', '==', companyId));
       const snapshot = await getDocs(q);
       
       const invites = snapshot.docs.map(doc => ({
@@ -220,12 +225,12 @@ export const firestoreService = {
       
       if (agencyDoc.exists()) {
         const data = agencyDoc.data();
-        const colaboradores = data.colaboradores || [];
+        const collaborators = data.collaborators || [];
         
-        const updatedColaboradores = colaboradores.filter(colab => colab.uid !== memberId);
+        const updatedCollaborators = collaborators.filter(uid => uid !== memberId);
         
         await updateDoc(agencyRef, {
-          colaboradores: updatedColaboradores,
+          collaborators: updatedCollaborators,
           updatedAt: serverTimestamp()
         });
         
@@ -320,12 +325,10 @@ export const firestoreService = {
         this.getAllCompanies()
       ]);
 
-      // Calcular métricas básicas
       const totalUsers = users.length;
       const totalCompanies = companies.length;
       const activeUsers = users.filter(u => !u.banned).length;
       
-      // Análise por tipo de usuário
       const userTypes = {
         individual: users.filter(u => u.userType === 'individual').length,
         company_owner: users.filter(u => u.userType === 'company_owner').length,
@@ -333,7 +336,6 @@ export const firestoreService = {
         admin: users.filter(u => u.userType === 'admin').length
       };
 
-      // Análise de planos
       const subscriptionStats = {
         free: users.filter(u => !u.subscription || u.subscription === 'free').length,
         premium: users.filter(u => u.subscription === 'premium').length,
@@ -407,6 +409,8 @@ export const firestoreService = {
       
       const newCompany = {
         ...companyData,
+        ownerUID: companyData.ownerUID,
+        collaborators: companyData.collaborators || [],
         createdAt: serverTimestamp()
       };
       
@@ -437,10 +441,10 @@ export const firestoreService = {
   async getUserInvites(userEmail: string) {
     try {
       console.log('📨 Buscando convites para:', userEmail);
-      const invitesRef = collection(db, 'convites');
+      const invitesRef = collection(db, 'invites');
       const q = query(
         invitesRef, 
-        where('invitedEmail', '==', userEmail),
+        where('email', '==', userEmail),
         where('status', '==', 'pending')
       );
       const snapshot = await getDocs(q);
@@ -458,31 +462,23 @@ export const firestoreService = {
     }
   },
 
-  async acceptInvite(inviteId: string, userId: string, companyId: string) {
+  async acceptInvite(inviteId: string, userId: string, agencyId: string) {
     try {
       console.log('✅ Aceitando convite:', inviteId);
       
-      // Atualizar status do convite
       await this.updateInviteStatus(inviteId, 'accepted');
       
-      // Adicionar usuário à empresa
-      const companyData = await this.getAgencyData(companyId);
-      if (companyData && companyData.colaboradores) {
-        const userData = await this.getUserData(userId);
-        if (userData) {
-          const newCollaborator = {
-            uid: userId,
-            email: userData.email,
-            role: 'employee'
-          };
-          
-          const updatedCollaborators = [...companyData.colaboradores, newCollaborator];
-          await this.updateCompanyField(companyId, 'colaboradores', updatedCollaborators);
-          
-          // Atualizar tipo do usuário
-          await this.updateUserField(userId, 'userType', 'employee');
-          await this.updateUserField(userId, 'companyId', companyId);
+      const agencyData = await this.getAgencyData(agencyId);
+      if (agencyData) {
+        const collaborators = agencyData.collaborators || [];
+        
+        if (!collaborators.includes(userId)) {
+          const updatedCollaborators = [...collaborators, userId];
+          await this.updateCompanyField(agencyId, 'collaborators', updatedCollaborators);
         }
+        
+        await this.updateUserField(userId, 'userType', 'employee');
+        await this.updateUserField(userId, 'companyId', agencyId);
       }
       
       console.log('✅ Convite aceito com sucesso');
@@ -495,7 +491,7 @@ export const firestoreService = {
   async updateInviteStatus(inviteId: string, status: string) {
     try {
       console.log('📝 Atualizando status do convite:', inviteId, status);
-      const inviteRef = doc(db, 'convites', inviteId);
+      const inviteRef = doc(db, 'invites', inviteId);
       await updateDoc(inviteRef, {
         status,
         updatedAt: serverTimestamp()
