@@ -13,7 +13,8 @@ import {
   UserCheck, 
   Building2,
   Crown,
-  Send
+  Send,
+  Shield
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -77,9 +78,16 @@ const CompanyDashboard = () => {
       
       setTeamMembers(membersData);
 
-      // Carregar convites pendentes
-      const invites = await firestoreService.getCompanyInvites(agencyData.id);
-      setPendingInvites(invites);
+      // Carregar convites pendentes (apenas para Admin e Owner)
+      if (isAdmin || isOwner) {
+        try {
+          const invites = await firestoreService.getCompanyInvites(agencyData.id);
+          setPendingInvites(invites);
+        } catch (error) {
+          console.error('Erro ao carregar convites:', error);
+          setPendingInvites([]);
+        }
+      }
     } catch (error) {
       console.error('Erro ao carregar dados da empresa:', error);
     }
@@ -156,7 +164,74 @@ const CompanyDashboard = () => {
     }
   };
 
+  // Definir permissões baseadas no tipo de usuário
+  const isAdmin = user?.userType === 'admin';
   const isOwner = user?.id === agencyData?.ownerUID;
+  const isEmployee = user?.userType === 'employee' && !isOwner && !isAdmin;
+  
+  // Permissões específicas
+  const canInviteMembers = isAdmin || isOwner;
+  const canRemoveMembers = isAdmin || isOwner;
+  const canViewInvites = isAdmin || isOwner;
+  const canEditCompany = isAdmin; // Apenas Admin pode editar dados da empresa
+
+  // Se for colaborador, mostrar interface limitada
+  if (isEmployee) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center space-y-2">
+          <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
+            <Building2 className="text-purple-600" />
+            {agencyData?.name || 'Sua Empresa'}
+          </h2>
+          <p className="text-gray-600">Visualização da equipe - Colaborador</p>
+        </div>
+
+        {/* Estatísticas Limitadas para Colaboradores */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <Users className="h-8 w-8 mx-auto text-blue-600 mb-2" />
+              <p className="text-2xl font-bold">{teamMembers.length}</p>
+              <p className="text-sm text-gray-600">Membros da Equipe</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4 text-center">
+              <UserCheck className="h-8 w-8 mx-auto text-green-600 mb-2" />
+              <p className="text-sm font-medium">Colaborador</p>
+              <p className="text-xs text-gray-600">Seu Papel</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Lista de Membros - Apenas Visualização */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Membros da Equipe</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {teamMembers.map((member) => (
+                <div key={member.uid} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">{member.name || member.email}</h4>
+                    <p className="text-sm text-gray-600">{member.email}</p>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="outline">{member.role || 'Colaborador'}</Badge>
+                      <Badge variant="secondary">Ativo</Badge>
+                    </div>
+                  </div>
+                  {/* Colaboradores não podem remover membros */}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -164,8 +239,12 @@ const CompanyDashboard = () => {
         <h2 className="text-3xl font-bold flex items-center justify-center gap-2">
           <Building2 className="text-purple-600" />
           {agencyData?.name || 'Sua Empresa'}
+          {isAdmin && <Shield className="h-6 w-6 text-yellow-600" title="Admin" />}
+          {isOwner && <Crown className="h-6 w-6 text-yellow-600" title="Proprietário" />}
         </h2>
-        <p className="text-gray-600">Gestão de equipe e colaboradores</p>
+        <p className="text-gray-600">
+          {isAdmin ? 'Gestão administrativa da empresa' : 'Gestão de equipe e colaboradores'}
+        </p>
       </div>
 
       {/* Estatísticas da Empresa */}
@@ -178,34 +257,42 @@ const CompanyDashboard = () => {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Mail className="h-8 w-8 mx-auto text-orange-600 mb-2" />
-            <p className="text-2xl font-bold">{pendingInvites.length}</p>
-            <p className="text-sm text-gray-600">Convites Pendentes</p>
-          </CardContent>
-        </Card>
+        {canViewInvites && (
+          <Card>
+            <CardContent className="p-4 text-center">
+              <Mail className="h-8 w-8 mx-auto text-orange-600 mb-2" />
+              <p className="text-2xl font-bold">{pendingInvites.length}</p>
+              <p className="text-sm text-gray-600">Convites Pendentes</p>
+            </CardContent>
+          </Card>
+        )}
         
         <Card>
           <CardContent className="p-4 text-center">
-            <Crown className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
-            <p className="text-sm font-medium">{isOwner ? 'Proprietário' : 'Colaborador'}</p>
+            {isAdmin ? (
+              <Shield className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
+            ) : (
+              <Crown className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
+            )}
+            <p className="text-sm font-medium">
+              {isAdmin ? 'Administrador' : isOwner ? 'Proprietário' : 'Colaborador'}
+            </p>
             <p className="text-xs text-gray-600">Seu Papel</p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="team" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className={`grid w-full ${canViewInvites ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <TabsTrigger value="team">Equipe</TabsTrigger>
-          <TabsTrigger value="invites">Convites</TabsTrigger>
+          {canViewInvites && <TabsTrigger value="invites">Convites</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="team" className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Membros da Equipe</CardTitle>
-              {isOwner && (
+              {canInviteMembers && (
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button>
@@ -244,7 +331,7 @@ const CompanyDashboard = () => {
                         <Badge variant="secondary">Ativo</Badge>
                       </div>
                     </div>
-                    {isOwner && (
+                    {canRemoveMembers && member.uid !== agencyData?.ownerUID && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -260,40 +347,42 @@ const CompanyDashboard = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="invites" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Convites Pendentes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {pendingInvites.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Mail className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                    <p className="text-gray-600">Nenhum convite pendente</p>
-                  </div>
-                ) : (
-                  pendingInvites.map((invite) => (
-                    <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <h4 className="font-medium">{invite.email}</h4>
-                        <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt).toLocaleDateString()}</p>
-                        <Badge variant="outline" className="mt-2">
-                          {invite.status === 'pending' ? 'Aguardando' : invite.status}
-                        </Badge>
-                      </div>
-                      {isOwner && (
-                        <Button variant="outline" size="sm">
-                          Reenviar
-                        </Button>
-                      )}
+        {canViewInvites && (
+          <TabsContent value="invites" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Convites Pendentes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {pendingInvites.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Mail className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                      <p className="text-gray-600">Nenhum convite pendente</p>
                     </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  ) : (
+                    pendingInvites.map((invite) => (
+                      <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div>
+                          <h4 className="font-medium">{invite.email}</h4>
+                          <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt).toLocaleDateString()}</p>
+                          <Badge variant="outline" className="mt-2">
+                            {invite.status === 'pending' ? 'Aguardando' : invite.status}
+                          </Badge>
+                        </div>
+                        {canInviteMembers && (
+                          <Button variant="outline" size="sm">
+                            Reenviar
+                          </Button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
