@@ -29,17 +29,33 @@ export interface FirestoreUser {
     company?: string;
   };
   imageuser?: string;
-  userType?: 'individual' | 'company_owner' | 'employee' | 'admin';
+  userType?: 'individual' | 'owner' | 'collaborator' | 'admin';
   subscription?: 'free' | 'premium' | 'enterprise';
   banned?: boolean;
-  companyId?: string;
+  agencyId?: string;
 }
 
 export interface AgencyData {
   id: string;
   ownerUID: string;
-  collaborators?: any;
-  [key: string]: any;
+  name: string;
+  members?: string[];
+  permissions?: {
+    [uid: string]: 'admin' | 'editor' | 'viewer';
+  };
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface UserContextData {
+  uid: string;
+  email: string;
+  displayName?: string;
+  userType: 'owner' | 'collaborator' | 'individual' | 'admin';
+  agencyName?: string;
+  agencyId?: string;
+  hasAgencyData: boolean;
+  permissions?: 'admin' | 'editor' | 'viewer';
 }
 
 const isUserCollaborator = (collaborators: any, userUID: string): boolean => {
@@ -83,18 +99,205 @@ const removeCollaboratorFromStructure = (currentCollaborators: any, userUID: str
 
 export const firestoreService = {
   async createUser(user: FirestoreUser) {
-    const userRef = doc(db, 'usuarios', user.uid);
-    await setDoc(userRef, user);
+    const userRef = doc(db, 'users', user.uid);
+    await setDoc(userRef, {
+      ...user,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
   },
 
-  async getUserData(uid: string) {
-    const userRef = doc(db, 'usuarios', uid);
-    const userDoc = await getDoc(userRef);
-    return userDoc.exists() ? (userDoc.data() as FirestoreUser) : null;
+  async getUserData(uid: string): Promise<FirestoreUser | null> {
+    try {
+      const userRef = doc(db, 'users', uid);
+      const userDoc = await getDoc(userRef);
+      return userDoc.exists() ? (userDoc.data() as FirestoreUser) : null;
+    } catch (error) {
+      console.error('Erro ao buscar dados do usuário:', error);
+      return null;
+    }
+  },
+
+  async getUserAuthData(uid: string): Promise<UserContextData | null> {
+    try {
+      console.log('🔍 Verificando dados de autenticação para UID:', uid);
+      
+      // Verificar se é admin pelo email
+      const userData = await this.getUserData(uid);
+      if (userData?.email === 'adm.financeflow@gmail.com') {
+        console.log('👑 Usuário é ADMIN');
+        return {
+          uid,
+          email: userData.email,
+          displayName: userData.name,
+          userType: 'admin',
+          hasAgencyData: false
+        };
+      }
+
+      // Buscar se é dono de alguma agência
+      const agenciesRef = collection(db, 'agencies');
+      const ownerQuery = query(agenciesRef, where('ownerUID', '==', uid));
+      const ownerSnapshot = await getDocs(ownerQuery);
+
+      if (!ownerSnapshot.empty) {
+        const agencyDoc = ownerSnapshot.docs[0];
+        const agencyData = { id: agencyDoc.id, ...agencyDoc.data() } as AgencyData;
+        console.log('👑 Usuário é DONO da agência:', agencyData.name);
+        
+        return {
+          uid,
+          email: userData?.email || '',
+          displayName: userData?.name,
+          userType: 'owner',
+          agencyName: agencyData.name,
+          agencyId: agencyData.id,
+          hasAgencyData: true,
+          permissions: 'admin'
+        };
+      }
+
+      // Buscar se é colaborador de alguma agência
+      const allAgenciesSnapshot = await getDocs(agenciesRef);
+      for (const agencyDoc of allAgenciesSnapshot.docs) {
+        const agencyData = { id: agencyDoc.id, ...agencyDoc.data() } as AgencyData;
+        
+        if (agencyData.members && agencyData.members.includes(uid)) {
+          const userPermission = agencyData.permissions?.[uid] || 'viewer';
+          console.log('👥 Usuário é COLABORADOR da agência:', agencyData.name, 'com permissão:', userPermission);
+          
+          return {
+            uid,
+            email: userData?.email || '',
+            displayName: userData?.name,
+            userType: 'collaborator',
+            agencyName: agencyData.name,
+            agencyId: agencyData.id,
+            hasAgencyData: true,
+            permissions: userPermission
+          };
+        }
+      }
+
+      // Se não é dono nem colaborador, é individual
+      console.log('👤 Usuário é INDIVIDUAL');
+      return {
+        uid,
+        email: userData?.email || '',
+        displayName: userData?.name,
+        userType: 'individual',
+        hasAgencyData: false
+      };
+
+    } catch (error) {
+      console.error('❌ Erro ao verificar dados de autenticação:', error);
+      return null;
+    }
+  },
+
+  async getAgencyData(agencyId: string): Promise<AgencyData | null> {
+    try {
+      const agencyRef = doc(db, 'agencies', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+      return agencyDoc.exists() ? { id: agencyDoc.id, ...agencyDoc.data() } as AgencyData : null;
+    } catch (error) {
+      console.error('Erro ao buscar dados da agência:', error);
+      return null;
+    }
+  },
+
+  async createAgency(agencyData: Omit<AgencyData, 'id'>) {
+    const agenciesRef = collection(db, 'agencies');
+    const docRef = await addDoc(agenciesRef, {
+      ...agencyData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    return docRef.id;
+  },
+
+  async addCollaboratorToAgency(agencyId: string, collaboratorUID: string, permission: 'editor' | 'viewer' = 'viewer') {
+    try {
+      const agencyRef = doc(db, 'agencies', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+      
+      if (!agencyDoc.exists()) {
+        throw new Error('Agência não encontrada');
+      }
+
+      const currentData = agencyDoc.data() as AgencyData;
+      const currentMembers = currentData.members || [];
+      const currentPermissions = currentData.permissions || {};
+
+      // Adicionar colaborador se não existir
+      if (!currentMembers.includes(collaboratorUID)) {
+        currentMembers.push(collaboratorUID);
+      }
+
+      // Definir permissão
+      currentPermissions[collaboratorUID] = permission;
+
+      await updateDoc(agencyRef, {
+        members: currentMembers,
+        permissions: currentPermissions,
+        updatedAt: serverTimestamp()
+      });
+
+      // Atualizar dados do usuário
+      await this.updateUserField(collaboratorUID, 'userType', 'collaborator');
+      await this.updateUserField(collaboratorUID, 'agencyId', agencyId);
+
+    } catch (error) {
+      console.error('Erro ao adicionar colaborador:', error);
+      throw error;
+    }
+  },
+
+  async removeCollaboratorFromAgency(agencyId: string, collaboratorUID: string) {
+    try {
+      const agencyRef = doc(db, 'agencies', agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+      
+      if (!agencyDoc.exists()) return;
+
+      const currentData = agencyDoc.data() as AgencyData;
+      const currentMembers = currentData.members || [];
+      const currentPermissions = currentData.permissions || {};
+
+      // Remover colaborador
+      const updatedMembers = currentMembers.filter(uid => uid !== collaboratorUID);
+      delete currentPermissions[collaboratorUID];
+
+      await updateDoc(agencyRef, {
+        members: updatedMembers,
+        permissions: currentPermissions,
+        updatedAt: serverTimestamp()
+      });
+
+      // Atualizar dados do usuário
+      await this.updateUserField(collaboratorUID, 'userType', 'individual');
+      await this.updateUserField(collaboratorUID, 'agencyId', null);
+
+    } catch (error) {
+      console.error('Erro ao remover colaborador:', error);
+      throw error;
+    }
+  },
+
+  async getUserInvites(email: string) {
+    try {
+      const invitesRef = collection(db, 'invites');
+      const q = query(invitesRef, where('email', '==', email), where('status', '==', 'pending'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Erro ao buscar convites:', error);
+      return [];
+    }
   },
 
   async updateUserField(uid: string, field: string, value: any) {
-    const userRef = doc(db, 'usuarios', uid);
+    const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, {
       [field]: value,
       updatedAt: serverTimestamp()
@@ -102,50 +305,26 @@ export const firestoreService = {
   },
 
   async deleteUser(uid: string) {
-    const userRef = doc(db, 'usuarios', uid);
+    const userRef = doc(db, 'users', uid);
     await deleteDoc(userRef);
   },
 
   async getUserAgency(uid: string): Promise<AgencyData | null> {
-    try {
-      const agenciasRef = collection(db, 'agencias');
-      const snapshot = await getDocs(agenciasRef);
-      for (const docSnapshot of snapshot.docs) {
-        const agencyData = { id: docSnapshot.id, ...docSnapshot.data() } as AgencyData;
-        if (agencyData.ownerUID === uid) {
-          return agencyData;
-        }
-        if (isUserCollaborator(agencyData.collaborators, uid)) {
-          return agencyData;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Erro ao buscar agência:', error);
-      return null;
+    const authData = await this.getUserAuthData(uid);
+    if (authData?.agencyId) {
+      return await this.getAgencyData(authData.agencyId);
     }
+    return null;
   },
 
   async getAllAgencies(): Promise<AgencyData[]> {
-    const agenciasRef = collection(db, 'agencias');
+    const agenciasRef = collection(db, 'agencies');
     const snapshot = await getDocs(agenciasRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AgencyData));
   },
 
   async addCollaboratorToCompany(companyId: string, collaboratorUID: string) {
-    const agencyRef = doc(db, 'agencias', companyId);
-    const agencyDoc = await getDoc(agencyRef);
-    if (!agencyDoc.exists()) {
-      throw new Error('Agência não encontrada');
-    }
-    const currentData = agencyDoc.data();
-    const updatedCollaborators = addCollaboratorToStructure(currentData.collaborators, collaboratorUID);
-    await updateDoc(agencyRef, {
-      collaborators: updatedCollaborators,
-      updatedAt: serverTimestamp()
-    });
-    await this.updateUserField(collaboratorUID, 'userType', 'employee');
-    await this.updateUserField(collaboratorUID, 'companyId', companyId);
+    await this.addCollaboratorToAgency(companyId, collaboratorUID, 'editor');
   },
 
   async saveKanbanBoard(agencyId: string, boardData: any) {
@@ -187,17 +366,7 @@ export const firestoreService = {
   },
 
   async removeCompanyMember(companyId: string, memberId: string) {
-    const agencyRef = doc(db, 'agencias', companyId);
-    const agencyDoc = await getDoc(agencyRef);
-    if (!agencyDoc.exists()) return;
-    const currentData = agencyDoc.data();
-    const updatedCollaborators = removeCollaboratorFromStructure(currentData.collaborators, memberId);
-    await updateDoc(agencyRef, {
-      collaborators: updatedCollaborators,
-      updatedAt: serverTimestamp()
-    });
-    await this.updateUserField(memberId, 'userType', 'individual');
-    await this.updateUserField(memberId, 'companyId', null);
+    await this.removeCollaboratorFromAgency(companyId, memberId);
   },
 
   async updateField(collectionName: string, docId: string, field: string, value: any) {
@@ -208,20 +377,14 @@ export const firestoreService = {
     });
   },
 
-  async getAgencyData(agencyId: string): Promise<AgencyData | null> {
-    const agencyRef = doc(db, 'agencias', agencyId);
-    const agencyDoc = await getDoc(agencyRef);
-    return agencyDoc.exists() ? { id: agencyDoc.id, ...agencyDoc.data() } as AgencyData : null;
-  },
-
   async getAllUsers() {
-    const usersRef = collection(db, 'usuarios');
+    const usersRef = collection(db, 'users');
     const snapshot = await getDocs(usersRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
   async getAllCompanies() {
-    const companiesRef = collection(db, 'agencias');
+    const companiesRef = collection(db, 'agencies');
     const snapshot = await getDocs(companiesRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
@@ -236,8 +399,8 @@ export const firestoreService = {
     const activeUsers = users.filter(u => !u.banned).length;
     const userTypes = {
       individual: users.filter(u => u.userType === 'individual').length,
-      company_owner: users.filter(u => u.userType === 'company_owner').length,
-      employee: users.filter(u => u.userType === 'employee').length,
+      owner: users.filter(u => u.userType === 'owner').length,
+      collaborator: users.filter(u => u.userType === 'collaborator').length,
       admin: users.filter(u => u.userType === 'admin').length
     };
     const subscriptionStats = {
