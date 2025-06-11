@@ -9,16 +9,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Users, 
-  
   Mail, 
   Plus, 
   UserCheck, 
   Building2,
   Crown,
-  Send,
   Shield,
   Eye,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,7 +26,6 @@ import { firestoreService } from '../services/firestore';
 const CompanyDashboard = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('viewer');
-  const [pendingInvites, setPendingInvites] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const { user, agencyData } = useAuth();
   const { toast } = useToast();
@@ -74,66 +72,61 @@ const CompanyDashboard = () => {
       }
       
       setTeamMembers(members);
-
-      // Carregar convites pendentes
-      const invites = await firestoreService.getCompanyInvites(agencyData.id);
-      setPendingInvites(invites);
     } catch (error) {
       console.error('Erro ao carregar dados da empresa:', error);
     }
   };
 
- const handleAddMemberDirect = async () => {
-  if (!inviteEmail || !agencyData) {
-    toast({
-      title: "Erro",
-      description: "Digite um email válido",
-      variant: "destructive"
-    });
-    return;
-  }
-
-  try {
-    console.log('🔍 Procurando usuário com e-mail:', inviteEmail);
-    const userBasic = await firestoreService.getUserByEmail(inviteEmail);
-
-    if (!userBasic) {
+  const handleAddMemberDirect = async () => {
+    if (!inviteEmail || !agencyData) {
       toast({
-        title: "Usuário não encontrado",
-        description: "Esse e-mail ainda não está cadastrado na plataforma.",
+        title: "Erro",
+        description: "Digite um email válido",
         variant: "destructive"
       });
       return;
     }
 
-    console.log('👤 Usuário encontrado:', userBasic);
+    try {
+      console.log('🔍 Procurando usuário com e-mail:', inviteEmail);
+      const userBasic = await firestoreService.getUserByEmail(inviteEmail);
 
-    // Buscar dados completos do usuário para obter o nome
-    const userData = await firestoreService.getUserData(userBasic.id);
+      if (!userBasic) {
+        toast({
+          title: "Usuário não encontrado",
+          description: "Esse e-mail ainda não está cadastrado na plataforma.",
+          variant: "destructive"
+        });
+        return;
+      }
 
-    await firestoreService.addCompanyMember(agencyData.id, userBasic.id, inviteRole);
+      console.log('👤 Usuário encontrado:', userBasic);
 
-    setInviteEmail('');
-    setInviteRole('viewer');
-    await loadCompanyData();
+      // Buscar dados completos do usuário para obter o nome
+      const userData = await firestoreService.getUserData(userBasic.id);
 
-    const displayName = userData?.name?.trim() || inviteEmail?.trim() || 'Desconhecido';
+      await firestoreService.addCompanyMember(agencyData.id, userBasic.id, inviteRole);
+
+      setInviteEmail('');
+      setInviteRole('viewer');
+      await loadCompanyData();
+
+      const displayName = userData?.name?.trim() || inviteEmail?.trim() || 'Desconhecido';
 
       toast({
-  title: "Sucesso",
-  description: `Membro ${displayName} adicionado como ${getRoleLabel(inviteRole)}!`
-});
+        title: "Sucesso",
+        description: `Membro ${displayName} adicionado como ${getRoleLabel(inviteRole)}!`
+      });
 
-  } catch (error) {
-    console.error('❌ Erro ao adicionar membro diretamente:', error);
-    toast({
-      title: "Erro",
-      description: "Erro ao adicionar membro. Verifique as permissões.",
-      variant: "destructive"
-    });
-  }
-};
-
+    } catch (error) {
+      console.error('❌ Erro ao adicionar membro diretamente:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar membro. Verifique as permissões.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleRemoveMember = async (memberId) => {
     try {
@@ -174,8 +167,8 @@ const CompanyDashboard = () => {
     }
   };
 
-  const canInviteMembers = (userRole) => {
-    // Apenas owners podem convidar outros membros
+  const canManageMembers = (userRole) => {
+    // Apenas owners podem gerenciar membros
     return userRole === 'owner';
   };
 
@@ -201,20 +194,12 @@ const CompanyDashboard = () => {
       </div>
 
       {/* Estatísticas da Empresa */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
             <Users className="h-8 w-8 mx-auto text-blue-600 mb-2" />
             <p className="text-2xl font-bold">{teamMembers.length}</p>
             <p className="text-sm text-gray-600">Membros da Equipe</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Mail className="h-8 w-8 mx-auto text-orange-600 mb-2" />
-            <p className="text-2xl font-bold">{pendingInvites.length}</p>
-            <p className="text-sm text-gray-600">Convites Pendentes</p>
           </CardContent>
         </Card>
         
@@ -227,135 +212,86 @@ const CompanyDashboard = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="team" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="team">Equipe</TabsTrigger>
-          <TabsTrigger value="invites">Convites</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="team" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Membros da Equipe</CardTitle>
-              {canInviteMembers(currentUserRole) && (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Convidar Membro
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Convidar Novo Membro</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <Input
-                        placeholder="Email do colaborador"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                      />
-                      <Select value={inviteRole} onValueChange={setInviteRole}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecionar permissão" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="editor">
-                            <div className="flex items-center gap-2">
-                              <Edit className="h-4 w-4 text-blue-600" />
-                              Editor - Pode editar projetos e tarefas
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="viewer">
-                            <div className="flex items-center gap-2">
-                              <Eye className="h-4 w-4 text-gray-600" />
-                              Visualizador - Apenas visualizar
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button onClick={handleAddMemberDirect} className="w-full">
-  <UserCheck className="h-4 w-4 mr-2" />
-  Adicionar Membro
-</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              )}
-            </CardHeader>
-            <CardContent>
-  <div className="space-y-4">
-    {teamMembers.map((member, index) => (
-      <div key={`${member.uid}-${index}`} className="flex items-center justify-between p-4 border rounded-lg">
-        <div>
-          <h4 className="font-medium">{member.name}</h4>
-          <p className="text-sm text-gray-600">{member.email}</p>
-          <div className="flex gap-2 mt-2">
-            <Badge variant="outline" className="flex items-center gap-1">
-              {getRoleIcon(member.role)}
-              {getRoleLabel(member.role)}
-            </Badge>
-            <Badge variant="secondary">Ativo</Badge>
-          </div>
-        </div>
-        {canRemoveMembers(currentUserRole, member.role) && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleRemoveMember(member.uid)}
-          >
-            Remover
-          </Button>
-        )}
-      </div>
-    ))}
-  </div>
-</CardContent>
-
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="invites" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Convites Pendentes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {pendingInvites.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Mail className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                    <p className="text-gray-600">Nenhum convite pendente</p>
-                  </div>
-                ) : (
-                  pendingInvites.map((invite) => (
-                    <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <h4 className="font-medium">{invite.email}</h4>
-                        <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt?.toDate?.() || invite.sentAt).toLocaleDateString()}</p>
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="outline" className="flex items-center gap-1">
-                            {getRoleIcon(invite.role)}
-                            {getRoleLabel(invite.role)}
-                          </Badge>
-                          <Badge variant="outline">
-                            {invite.status === 'pending' ? 'Aguardando' : invite.status}
-                          </Badge>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Membros da Equipe</CardTitle>
+          {canManageMembers(currentUserRole) && (
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Membro
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Adicionar Novo Membro</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Input
+                    placeholder="Email do colaborador"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar permissão" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="editor">
+                        <div className="flex items-center gap-2">
+                          <Edit className="h-4 w-4 text-blue-600" />
+                          Editor - Pode editar projetos e tarefas
                         </div>
-                      </div>
-                      {isOwner && (
-                        <Button variant="outline" size="sm">
-                          Reenviar
-                        </Button>
-                      )}
-                    </div>
-                  ))
+                      </SelectItem>
+                      <SelectItem value="viewer">
+                        <div className="flex items-center gap-2">
+                          <Eye className="h-4 w-4 text-gray-600" />
+                          Visualizador - Apenas visualizar
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={handleAddMemberDirect} className="w-full">
+                    <UserCheck className="h-4 w-4 mr-2" />
+                    Adicionar Membro
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {teamMembers.map((member, index) => (
+              <div key={`${member.uid}-${index}`} className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">{member.name}</h4>
+                  <p className="text-sm text-gray-600">{member.email}</p>
+                  <div className="flex gap-2 mt-2">
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      {getRoleIcon(member.role)}
+                      {getRoleLabel(member.role)}
+                    </Badge>
+                    <Badge variant="secondary">Ativo</Badge>
+                  </div>
+                </div>
+                {canRemoveMembers(currentUserRole, member.role) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleRemoveMember(member.uid)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remover
+                  </Button>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
