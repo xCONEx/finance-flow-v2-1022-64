@@ -24,8 +24,7 @@ import {
   CheckCircle,
   Clock,
   Activity,
-  Eye,
-  UserMinus
+  Eye
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { firestoreService } from '../services/firestore';
@@ -41,8 +40,6 @@ const AdminPanel = () => {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [editingCompany, setEditingCompany] = useState(null);
   const [showCompanyMembers, setShowCompanyMembers] = useState({});
-  const [newCollaboratorEmail, setNewCollaboratorEmail] = useState('');
-  const [addingCollaboratorTo, setAddingCollaboratorTo] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -176,8 +173,8 @@ const AdminPanel = () => {
 
       const companyData = {
         name: newCompanyName,
-        ownerUID: owner.uid || owner.id,
-        collaborators: [],
+        ownerUID: owner.id,
+        colaboradores: [{ uid: owner.id, email: owner.email, role: 'owner' }],
         equipments: [],
         expenses: [],
         jobs: [],
@@ -186,8 +183,8 @@ const AdminPanel = () => {
       
       const companyId = await firestoreService.createCompany(companyData);
       
-      await firestoreService.updateUserField(owner.uid || owner.id, 'userType', 'company_owner');
-      await firestoreService.updateUserField(owner.uid || owner.id, 'companyId', companyId);
+      await firestoreService.updateUserField(owner.id, 'userType', 'company_owner');
+      await firestoreService.updateUserField(owner.id, 'companyId', companyId);
       
       setNewCompanyName('');
       setNewCompanyOwnerEmail('');
@@ -207,9 +204,11 @@ const AdminPanel = () => {
     }
   };
 
+  // CORRIGIDO: Função para editar empresa agora usa o método correto
   const handleEditCompany = async (companyId, newData) => {
     try {
       console.log('Editando empresa:', companyId, newData);
+      // Usar o método correto para atualizar empresa, não usuário
       await firestoreService.updateCompanyField(companyId, 'name', newData.name);
       
       setCompanies(companies.map(company => 
@@ -227,112 +226,6 @@ const AdminPanel = () => {
       toast({
         title: "Erro",
         description: "Erro ao editar empresa",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleDeleteCompany = async (companyId, companyName) => {
-    if (!confirm(`Tem certeza que deseja excluir a empresa "${companyName}"? Esta ação não pode ser desfeita.`)) {
-      return;
-    }
-
-    try {
-      console.log('Excluindo empresa:', companyId);
-      await firestoreService.deleteCompany(companyId);
-      
-      setCompanies(companies.filter(company => company.id !== companyId));
-      
-      toast({
-        title: "Sucesso",
-        description: "Empresa excluída com sucesso"
-      });
-    } catch (error) {
-      console.error('Erro ao excluir empresa:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao excluir empresa",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleAddCollaborator = async () => {
-    if (!newCollaboratorEmail || !addingCollaboratorTo) {
-      toast({
-        title: "Erro",
-        description: "Preencha o email do colaborador",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      console.log('Adicionando colaborador:', newCollaboratorEmail, 'à empresa:', addingCollaboratorTo);
-      
-      const user = users.find(u => u.email === newCollaboratorEmail);
-      if (!user) {
-        toast({
-          title: "Erro",
-          description: "Usuário não encontrado",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      await firestoreService.addCollaboratorToCompany(addingCollaboratorTo, user.uid || user.id);
-      
-      // Atualizar o estado local
-      setCompanies(companies.map(company => {
-        if (company.id === addingCollaboratorTo) {
-          const updatedCollaborators = [...(company.collaborators || []), user.uid || user.id];
-          return { ...company, collaborators: updatedCollaborators };
-        }
-        return company;
-      }));
-      
-      setNewCollaboratorEmail('');
-      setAddingCollaboratorTo(null);
-      
-      toast({
-        title: "Sucesso",
-        description: "Colaborador adicionado com sucesso"
-      });
-    } catch (error) {
-      console.error('Erro ao adicionar colaborador:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao adicionar colaborador",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleRemoveCollaborator = async (companyId, collaboratorUID) => {
-    try {
-      console.log('Removendo colaborador:', companyId, collaboratorUID);
-      await firestoreService.removeCompanyMember(companyId, collaboratorUID);
-      
-      // Atualizar o estado local
-      setCompanies(companies.map(company => {
-        if (company.id === companyId) {
-          return {
-            ...company,
-            collaborators: company.collaborators.filter(uid => uid !== collaboratorUID)
-          };
-        }
-        return company;
-      }));
-      
-      toast({
-        title: "Sucesso",
-        description: "Colaborador removido com sucesso"
-      });
-    } catch (error) {
-      console.error('Erro ao remover colaborador:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao remover colaborador",
         variant: "destructive"
       });
     }
@@ -361,7 +254,7 @@ const AdminPanel = () => {
         return;
       }
       
-      await firestoreService.updateUserField(user.uid || user.id, 'userType', 'admin');
+      await firestoreService.updateUserField(user.id, 'userType', 'admin');
       
       toast({
         title: "Sucesso",
@@ -385,11 +278,6 @@ const AdminPanel = () => {
       ...prev,
       [companyId]: !prev[companyId]
     }));
-  };
-
-  const getCollaboratorName = (uid) => {
-    const user = users.find(u => u.uid === uid || u.id === uid);
-    return user?.email || `UID: ${uid}`;
   };
 
   if (loading) {
@@ -418,6 +306,7 @@ const AdminPanel = () => {
         <p className="text-gray-600">Gestão completa da plataforma FinanceFlow</p>
       </div>
 
+      {/* Estatísticas Gerais - ADICIONADAS métricas por plano */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -452,6 +341,7 @@ const AdminPanel = () => {
         </Card>
       </div>
 
+      {/* NOVA seção: Métricas por Plano */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
@@ -497,7 +387,7 @@ const AdminPanel = () => {
                   <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <h4 className="font-medium">{user.email}</h4>
-                      <p className="text-sm text-gray-600">UID: {user.uid || user.id}</p>
+                      <p className="text-sm text-gray-600">UID: {user.uid}</p>
                       {user.personalInfo?.phone && (
                         <p className="text-sm text-gray-500">📞 {user.personalInfo.phone}</p>
                       )}
@@ -511,7 +401,7 @@ const AdminPanel = () => {
                     </div>
                     
                     <div className="flex gap-2 flex-wrap">
-                      <Select onValueChange={(value) => handleUpdateSubscription(user.uid || user.id, value)}>
+                      <Select onValueChange={(value) => handleUpdateSubscription(user.id, value)}>
                         <SelectTrigger className="w-32">
                           <SelectValue placeholder="Plano" />
                         </SelectTrigger>
@@ -522,7 +412,7 @@ const AdminPanel = () => {
                         </SelectContent>
                       </Select>
                       
-                      <Select onValueChange={(value) => handleUpdateUserType(user.uid || user.id, value)}>
+                      <Select onValueChange={(value) => handleUpdateUserType(user.id, value)}>
                         <SelectTrigger className="w-40">
                           <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
@@ -535,7 +425,7 @@ const AdminPanel = () => {
                       <Button
                         variant={user.banned ? "outline" : "destructive"}
                         size="sm"
-                        onClick={() => handleBanUser(user.uid || user.id, !user.banned)}
+                        onClick={() => handleBanUser(user.id, !user.banned)}
                       >
                         {user.banned ? "Desbanir" : "Banir"}
                       </Button>
@@ -599,39 +489,10 @@ const AdminPanel = () => {
                         <p className="text-sm text-gray-600">Owner UID: {company.ownerUID}</p>
                         <div className="flex gap-2 mt-2">
                           <Badge variant="outline">{company.plan || 'premium'}</Badge>
-                          <Badge variant="secondary">{company.collaborators?.length || 0} colaboradores</Badge>
+                          <Badge variant="secondary">{company.colaboradores?.length || 0} membros</Badge>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <UserPlus className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Adicionar Colaborador</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div>
-                                <Label>Email do Colaborador</Label>
-                                <Input
-                                  value={newCollaboratorEmail}
-                                  onChange={(e) => {
-                                    setNewCollaboratorEmail(e.target.value);
-                                    setAddingCollaboratorTo(company.id);
-                                  }}
-                                  placeholder="Digite o email do colaborador"
-                                />
-                              </div>
-                              <Button onClick={handleAddCollaborator} className="w-full">
-                                Adicionar Colaborador
-                              </Button>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button variant="outline" size="sm">
@@ -650,22 +511,12 @@ const AdminPanel = () => {
                                   onChange={(e) => setEditingCompany({ ...company, name: e.target.value })}
                                 />
                               </div>
-                              <div className="flex gap-2">
-                                <Button 
-                                  onClick={() => handleEditCompany(company.id, editingCompany)}
-                                  className="flex-1"
-                                >
-                                  Salvar Alterações
-                                </Button>
-                                <Button 
-                                  variant="destructive"
-                                  onClick={() => handleDeleteCompany(company.id, company.name)}
-                                  className="flex-1"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Excluir Empresa
-                                </Button>
-                              </div>
+                              <Button 
+                                onClick={() => handleEditCompany(company.id, editingCompany)}
+                                className="w-full"
+                              >
+                                Salvar Alterações
+                              </Button>
                             </div>
                           </DialogContent>
                         </Dialog>
@@ -682,26 +533,13 @@ const AdminPanel = () => {
                     
                     {showCompanyMembers[company.id] && (
                       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                        <h5 className="font-medium mb-2">Colaboradores da Equipe:</h5>
-                        {company.collaborators && company.collaborators.length > 0 ? (
-                          company.collaborators.map((collaboratorUID, index) => (
-                            <div key={index} className="flex justify-between items-center py-2 border-b last:border-0">
-                              <span className="text-sm">{getCollaboratorName(collaboratorUID)}</span>
-                              <div className="flex gap-2">
-                                <Badge variant="outline">Colaborador</Badge>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRemoveCollaborator(company.id, collaboratorUID)}
-                                >
-                                  <UserMinus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-gray-500">Nenhum colaborador encontrado</p>
-                        )}
+                        <h5 className="font-medium mb-2">Membros da Equipe:</h5>
+                        {company.colaboradores?.map((member, index) => (
+                          <div key={index} className="flex justify-between items-center py-1">
+                            <span className="text-sm">{member.email}</span>
+                            <Badge variant="outline">{member.role}</Badge>
+                          </div>
+                        )) || <p className="text-sm text-gray-500">Nenhum membro encontrado</p>}
                       </div>
                     )}
                   </div>
@@ -749,6 +587,7 @@ const AdminPanel = () => {
         <TabsContent value="analytics" className="space-y-4">
           {analytics && (
             <>
+              {/* KPIs Principais */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                   <CardHeader>
@@ -787,6 +626,7 @@ const AdminPanel = () => {
                 </Card>
               </div>
 
+              {/* Estatísticas por Tipo de Usuário */}
               <Card>
                 <CardHeader>
                   <CardTitle>Distribuição de Usuários</CardTitle>
@@ -813,6 +653,7 @@ const AdminPanel = () => {
                 </CardContent>
               </Card>
 
+              {/* Estatísticas de Negócio */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>

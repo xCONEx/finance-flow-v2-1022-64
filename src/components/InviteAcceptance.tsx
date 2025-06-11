@@ -25,6 +25,7 @@ const InviteAcceptance = () => {
       console.log('Carregando convites para:', user.email);
       setLoading(true);
       
+      // Buscar convites no Firebase
       const invites = await firestoreService.getUserInvites(user.email);
       setPendingInvites(invites);
     } catch (error) {
@@ -34,11 +35,12 @@ const InviteAcceptance = () => {
     }
   };
 
-  const handleAcceptInvite = async (inviteId, agencyId) => {
+  const handleAcceptInvite = async (inviteId, companyId) => {
     try {
-      console.log('Aceitando convite:', inviteId, agencyId);
+      console.log('Aceitando convite:', inviteId, companyId);
       
-      await firestoreService.acceptInvite(inviteId, user.id, agencyId);
+      // Aceitar convite no Firebase
+      await firestoreService.acceptInvite(inviteId, user.id, companyId);
       
       setPendingInvites(pendingInvites.filter(invite => invite.id !== inviteId));
       
@@ -47,6 +49,7 @@ const InviteAcceptance = () => {
         description: "Você agora faz parte da equipe da empresa!"
       });
       
+      // Recarregar dados do usuário
       window.location.reload();
     } catch (error) {
       console.error('Erro ao aceitar convite:', error);
@@ -62,6 +65,7 @@ const InviteAcceptance = () => {
     try {
       console.log('Recusando convite:', inviteId);
       
+      // Atualizar status do convite para recusado
       await firestoreService.updateInviteStatus(inviteId, 'declined');
       setPendingInvites(pendingInvites.filter(invite => invite.id !== inviteId));
       
@@ -88,7 +92,7 @@ const InviteAcceptance = () => {
   }
 
   if (pendingInvites.length === 0) {
-    return null;
+    return null; // Não mostrar nada se não há convites
   }
 
   return (
@@ -103,7 +107,7 @@ const InviteAcceptance = () => {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Building2 className="h-5 w-5 text-blue-600" />
-              Convite para {invite.agencyName}
+              Convite para {invite.companyName}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -116,13 +120,13 @@ const InviteAcceptance = () => {
                 <Badge variant="outline" className="ml-2">{invite.role}</Badge>
               </p>
               <p className="text-sm">
-                <strong>Data do convite:</strong> {invite.sentAt ? new Date(invite.sentAt.toDate()).toLocaleDateString() : 'Data não disponível'}
+                <strong>Data do convite:</strong> {new Date(invite.sentAt).toLocaleDateString()}
               </p>
             </div>
             
             <div className="flex gap-3">
               <Button 
-                onClick={() => handleAcceptInvite(invite.id, invite.agencyId)}
+                onClick={() => handleAcceptInvite(invite.id, invite.companyId)}
                 className="flex-1"
               >
                 <UserCheck className="h-4 w-4 mr-2" />

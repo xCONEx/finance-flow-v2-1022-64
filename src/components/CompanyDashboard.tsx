@@ -37,34 +37,9 @@ const CompanyDashboard = () => {
     try {
       console.log('Carregando dados da empresa...');
       
-      // Carregar colaboradores da equipe
-      const collaborators = agencyData.collaborators || [];
-      const memberDetails = await Promise.all(
-        collaborators.map(async (uid) => {
-          const userData = await firestoreService.getUserData(uid);
-          return {
-            uid: uid,
-            name: userData?.name || userData?.email?.split('@')[0] || 'Usuário',
-            email: userData?.email || '',
-            role: 'employee'
-          };
-        })
-      );
-
-      // Adicionar o proprietário à lista
-      if (agencyData.ownerUID) {
-        const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
-        if (ownerData) {
-          memberDetails.unshift({
-            uid: agencyData.ownerUID,
-            name: ownerData.name || ownerData.email?.split('@')[0] || 'Proprietário',
-            email: ownerData.email || '',
-            role: 'owner'
-          });
-        }
-      }
-
-      setTeamMembers(memberDetails);
+      // Carregar membros da equipe
+      const members = agencyData.colaboradores || [];
+      setTeamMembers(members);
 
       // Carregar convites pendentes
       const invites = await firestoreService.getCompanyInvites(agencyData.id);
@@ -99,7 +74,7 @@ const CompanyDashboard = () => {
       await firestoreService.sendInvite(inviteData);
       
       setInviteEmail('');
-      await loadCompanyData();
+      await loadCompanyData(); // Recarregar dados
 
       toast({
         title: "Sucesso",
@@ -120,7 +95,7 @@ const CompanyDashboard = () => {
       console.log('Removendo membro:', memberId);
       
       await firestoreService.removeCompanyMember(agencyData.id, memberId);
-      await loadCompanyData();
+      await loadCompanyData(); // Recarregar dados
       
       toast({
         title: "Sucesso",
@@ -217,16 +192,14 @@ const CompanyDashboard = () => {
                 {teamMembers.map((member) => (
                   <div key={member.uid} className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <h4 className="font-medium">{member.name}</h4>
+                      <h4 className="font-medium">{member.name || member.email}</h4>
                       <p className="text-sm text-gray-600">{member.email}</p>
                       <div className="flex gap-2 mt-2">
-                        <Badge variant="outline">
-                          {member.role === 'owner' ? 'Proprietário' : 'Colaborador'}
-                        </Badge>
+                        <Badge variant="outline">{member.role || 'Colaborador'}</Badge>
                         <Badge variant="secondary">Ativo</Badge>
                       </div>
                     </div>
-                    {isOwner && member.role !== 'owner' && (
+                    {isOwner && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -259,9 +232,7 @@ const CompanyDashboard = () => {
                     <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <h4 className="font-medium">{invite.email}</h4>
-                        <p className="text-sm text-gray-600">
-                          Enviado em {invite.sentAt ? new Date(invite.sentAt.toDate()).toLocaleDateString() : 'Data não disponível'}
-                        </p>
+                        <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt).toLocaleDateString()}</p>
                         <Badge variant="outline" className="mt-2">
                           {invite.status === 'pending' ? 'Aguardando' : invite.status}
                         </Badge>
