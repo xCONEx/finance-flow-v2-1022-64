@@ -40,6 +40,7 @@ export interface AgencyData {
   ownerUID: string;
   name: string;
   members?: string[];
+  collaborators?: string[]; // Added for backward compatibility
   permissions?: {
     [uid: string]: 'admin' | 'editor' | 'viewer';
   };
@@ -441,5 +442,46 @@ export const firestoreService = {
 
   async banUser(userId: string, banned: boolean) {
     await this.updateUserField(userId, 'banned', banned);
+  },
+
+  async updateUserSubscription(userId: string, plan: 'free' | 'premium' | 'enterprise') {
+    await this.updateUserField(userId, 'subscription', plan);
+  },
+
+  async createCompany(companyData: any) {
+    return await this.createAgency(companyData);
+  },
+
+  async updateCompanyField(companyId: string, field: string, value: any) {
+    const companyRef = doc(db, 'agencies', companyId);
+    await updateDoc(companyRef, {
+      [field]: value,
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async deleteCompany(companyId: string) {
+    const companyRef = doc(db, 'agencies', companyId);
+    await deleteDoc(companyRef);
+  },
+
+  async acceptInvite(inviteId: string, userId: string, agencyId: string) {
+    // Update invite status
+    const inviteRef = doc(db, 'invites', inviteId);
+    await updateDoc(inviteRef, {
+      status: 'accepted',
+      acceptedAt: serverTimestamp()
+    });
+
+    // Add user as collaborator to the agency
+    await this.addCollaboratorToAgency(agencyId, userId);
+  },
+
+  async updateInviteStatus(inviteId: string, status: 'accepted' | 'declined') {
+    const inviteRef = doc(db, 'invites', inviteId);
+    await updateDoc(inviteRef, {
+      status,
+      updatedAt: serverTimestamp()
+    });
   }
 };

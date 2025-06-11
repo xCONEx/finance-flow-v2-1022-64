@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,7 +44,7 @@ const CompanyDashboard = () => {
       console.warn('user está undefined');
       return false;
     }
-    const userId = user.uid || user.id;
+    const userId = user.id; // Using id instead of uid
     console.log('Comparando ownerUID:', agencyData.ownerUID, 'com userId:', userId);
     return agencyData.ownerUID === userId;
   };
@@ -57,9 +58,10 @@ const CompanyDashboard = () => {
     try {
       console.log('Carregando dados da empresa...');
       
-      const collaborators = agencyData.collaborators || [];
+      // Use members or collaborators (for backward compatibility)
+      const members = agencyData.members || agencyData.collaborators || [];
       const memberDetails = await Promise.all(
-        collaborators.map(async (uid) => {
+        members.map(async (uid) => {
           const userData = await firestoreService.getUserData(uid);
           return {
             uid: uid,

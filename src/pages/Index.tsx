@@ -18,7 +18,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { user } = useAuth();
 
-  const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'employee';
+  const isCompanyUser = user?.userType === 'owner' || user?.userType === 'collaborator';
   const isAdmin = user?.userType === 'admin';
 
   const renderContent = () => {
@@ -52,7 +52,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
-      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <Navigation />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">
         {renderContent()}

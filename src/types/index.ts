@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   email: string;
@@ -8,6 +7,7 @@ export interface User {
   userType: 'admin' | 'owner' | 'collaborator' | 'individual';
   companyId?: string;
   createdAt: string;
+  uid?: string; // Added for backward compatibility
 }
 
 export interface Company {
