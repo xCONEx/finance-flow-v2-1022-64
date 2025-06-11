@@ -183,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : job
         );
 
-        // Salvar no Firebase na coleção pessoal
+        // Salvar no Firebase na coleção usuarios
         await firestoreService.updateField('usuarios', user.id, 'jobs', updatedJobs);
         console.log('✅ Job pessoal salvo no Firebase com sucesso');
       }

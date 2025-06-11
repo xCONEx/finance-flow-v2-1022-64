@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let userData = await firestoreService.getUserData(firebaseUser.uid);
           
           if (!userData) {
-            console.log('👤 Criando novo usuário na coleção users...');
+            console.log('👤 Criando novo usuário na coleção usuarios...');
             const newUserData: FirestoreUser = {
               email: firebaseUser.email || '',
               uid: firebaseUser.uid,

@@ -1,3 +1,4 @@
+
 import {
   collection,
   doc,
@@ -100,7 +101,7 @@ const removeCollaboratorFromStructure = (currentCollaborators: any, userUID: str
 
 export const firestoreService = {
   async createUser(user: FirestoreUser) {
-    const userRef = doc(db, 'users', user.uid);
+    const userRef = doc(db, 'usuarios', user.uid);
     await setDoc(userRef, {
       ...user,
       createdAt: serverTimestamp(),
@@ -110,7 +111,7 @@ export const firestoreService = {
 
   async getUserData(uid: string): Promise<FirestoreUser | null> {
     try {
-      const userRef = doc(db, 'users', uid);
+      const userRef = doc(db, 'usuarios', uid);
       const userDoc = await getDoc(userRef);
       return userDoc.exists() ? (userDoc.data() as FirestoreUser) : null;
     } catch (error) {
@@ -137,7 +138,7 @@ export const firestoreService = {
       }
 
       // Buscar se é dono de alguma agência
-      const agenciesRef = collection(db, 'agencies');
+      const agenciesRef = collection(db, 'agencias');
       const ownerQuery = query(agenciesRef, where('ownerUID', '==', uid));
       const ownerSnapshot = await getDocs(ownerQuery);
 
@@ -198,7 +199,7 @@ export const firestoreService = {
 
   async getAgencyData(agencyId: string): Promise<AgencyData | null> {
     try {
-      const agencyRef = doc(db, 'agencies', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
       const agencyDoc = await getDoc(agencyRef);
       return agencyDoc.exists() ? { id: agencyDoc.id, ...agencyDoc.data() } as AgencyData : null;
     } catch (error) {
@@ -208,7 +209,7 @@ export const firestoreService = {
   },
 
   async createAgency(agencyData: Omit<AgencyData, 'id'>) {
-    const agenciesRef = collection(db, 'agencies');
+    const agenciesRef = collection(db, 'agencias');
     const docRef = await addDoc(agenciesRef, {
       ...agencyData,
       createdAt: serverTimestamp(),
@@ -219,7 +220,7 @@ export const firestoreService = {
 
   async addCollaboratorToAgency(agencyId: string, collaboratorUID: string, permission: 'editor' | 'viewer' = 'viewer') {
     try {
-      const agencyRef = doc(db, 'agencies', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
       const agencyDoc = await getDoc(agencyRef);
       
       if (!agencyDoc.exists()) {
@@ -256,7 +257,7 @@ export const firestoreService = {
 
   async removeCollaboratorFromAgency(agencyId: string, collaboratorUID: string) {
     try {
-      const agencyRef = doc(db, 'agencies', agencyId);
+      const agencyRef = doc(db, 'agencias', agencyId);
       const agencyDoc = await getDoc(agencyRef);
       
       if (!agencyDoc.exists()) return;
@@ -298,7 +299,7 @@ export const firestoreService = {
   },
 
   async updateUserField(uid: string, field: string, value: any) {
-    const userRef = doc(db, 'users', uid);
+    const userRef = doc(db, 'usuarios', uid);
     await updateDoc(userRef, {
       [field]: value,
       updatedAt: serverTimestamp()
@@ -306,7 +307,7 @@ export const firestoreService = {
   },
 
   async deleteUser(uid: string) {
-    const userRef = doc(db, 'users', uid);
+    const userRef = doc(db, 'usuarios', uid);
     await deleteDoc(userRef);
   },
 
@@ -319,7 +320,7 @@ export const firestoreService = {
   },
 
   async getAllAgencies(): Promise<AgencyData[]> {
-    const agenciasRef = collection(db, 'agencies');
+    const agenciasRef = collection(db, 'agencias');
     const snapshot = await getDocs(agenciasRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AgencyData));
   },
@@ -329,18 +330,21 @@ export const firestoreService = {
   },
 
   async saveKanbanBoard(agencyId: string, boardData: any) {
-    const boardRef = doc(db, 'kanban_boards', agencyId);
-    await setDoc(boardRef, {
-      agencyId,
-      ...boardData,
+    const agencyRef = doc(db, 'agencias', agencyId);
+    await updateDoc(agencyRef, {
+      kanban: boardData,
       updatedAt: serverTimestamp()
     });
   },
 
   async getKanbanBoard(agencyId: string) {
-    const boardRef = doc(db, 'kanban_boards', agencyId);
-    const boardDoc = await getDoc(boardRef);
-    return boardDoc.exists() ? boardDoc.data() : null;
+    const agencyRef = doc(db, 'agencias', agencyId);
+    const agencyDoc = await getDoc(agencyRef);
+    if (agencyDoc.exists()) {
+      const agencyData = agencyDoc.data();
+      return agencyData.kanban || null;
+    }
+    return null;
   },
 
   async sendInvite(inviteData: any) {
@@ -379,13 +383,13 @@ export const firestoreService = {
   },
 
   async getAllUsers() {
-    const usersRef = collection(db, 'users');
+    const usersRef = collection(db, 'usuarios');
     const snapshot = await getDocs(usersRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
   async getAllCompanies() {
-    const companiesRef = collection(db, 'agencies');
+    const companiesRef = collection(db, 'agencias');
     const snapshot = await getDocs(companiesRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
@@ -453,7 +457,7 @@ export const firestoreService = {
   },
 
   async updateCompanyField(companyId: string, field: string, value: any) {
-    const companyRef = doc(db, 'agencies', companyId);
+    const companyRef = doc(db, 'agencias', companyId);
     await updateDoc(companyRef, {
       [field]: value,
       updatedAt: serverTimestamp()
@@ -461,7 +465,7 @@ export const firestoreService = {
   },
 
   async deleteCompany(companyId: string) {
-    const companyRef = doc(db, 'agencies', companyId);
+    const companyRef = doc(db, 'agencias', companyId);
     await deleteDoc(companyRef);
   },
 
