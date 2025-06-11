@@ -288,7 +288,7 @@ const UserProfile = () => {
   };
 
   // Determinar se o usuário está em uma empresa
-  const isInCompany = user?.userType === 'owner' || user?.userType === 'collaborator';
+  const isInCompany = user?.userType === 'company_owner' || user?.userType === 'employee';
   const companyName = agencyData?.name || 'Empresa não encontrada';
 
   return (
@@ -388,8 +388,8 @@ const UserProfile = () => {
                     <Label>Tipo de Usuário</Label>
                     <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
                       {user?.userType === 'admin' && 'Administrador do Sistema'}
-                      {user?.userType === 'owner' && 'Dono da Empresa'}
-                      {user?.userType === 'collaborator' && 'Colaborador'}
+                      {user?.userType === 'company_owner' && 'Dono da Empresa'}
+                      {user?.userType === 'employee' && 'Colaborador'}
                       {user?.userType === 'individual' && 'Usuário Individual'}
                     </p>
                   </div>

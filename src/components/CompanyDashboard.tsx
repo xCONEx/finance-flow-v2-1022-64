@@ -10,6 +10,7 @@ import {
   Users, 
   Mail, 
   Plus, 
+  UserCheck, 
   Building2,
   Crown,
   Send
@@ -27,30 +28,8 @@ const CompanyDashboard = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    console.log('Usuário atual:', user);
-  }, [user]);
-
-  useEffect(() => {
     loadCompanyData();
   }, [agencyData]);
-
-  // Função para verificar se o usuário é o proprietário da agência (autorizado)
-  const isAuthorizedAgency = () => {
-    if (!agencyData) {
-      console.warn('agencyData está undefined');
-      return false;
-    }
-    if (!user) {
-      console.warn('user está undefined');
-      return false;
-    }
-    const userId = user.id; // Using id instead of uid
-    console.log('Comparando ownerUID:', agencyData.ownerUID, 'com userId:', userId);
-    return agencyData.ownerUID === userId;
-  };
-
-  // Você pode usar isso para controlar quem pode convidar ou remover membros
-  const isOwner = isAuthorizedAgency();
 
   const loadCompanyData = async () => {
     if (!agencyData) return;
@@ -58,10 +37,10 @@ const CompanyDashboard = () => {
     try {
       console.log('Carregando dados da empresa...');
       
-      // Use members or collaborators (for backward compatibility)
-      const members = agencyData.members || agencyData.collaborators || [];
+      // Carregar colaboradores da equipe
+      const collaborators = agencyData.collaborators || [];
       const memberDetails = await Promise.all(
-        members.map(async (uid) => {
+        collaborators.map(async (uid) => {
           const userData = await firestoreService.getUserData(uid);
           return {
             uid: uid,
@@ -72,6 +51,7 @@ const CompanyDashboard = () => {
         })
       );
 
+      // Adicionar o proprietário à lista
       if (agencyData.ownerUID) {
         const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
         if (ownerData) {
@@ -86,6 +66,7 @@ const CompanyDashboard = () => {
 
       setTeamMembers(memberDetails);
 
+      // Carregar convites pendentes
       const invites = await firestoreService.getCompanyInvites(agencyData.id);
       setPendingInvites(invites);
     } catch (error) {
@@ -155,6 +136,8 @@ const CompanyDashboard = () => {
     }
   };
 
+  const isOwner = user?.userType === 'company_owner';
+
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
@@ -165,6 +148,7 @@ const CompanyDashboard = () => {
         <p className="text-gray-600">Gestão de equipe e colaboradores</p>
       </div>
 
+      {/* Estatísticas da Empresa */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 text-center">

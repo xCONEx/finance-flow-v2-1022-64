@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -79,7 +80,7 @@ const ImprovedKanban = () => {
     
     try {
       console.log('👥 Carregando membros da equipe...');
-      const members = agencyData.members || agencyData.collaborators || [];
+      const members = agencyData.colaboradores || [];
       setTeamMembers(members);
       console.log('✅ Membros carregados:', members.length);
     } catch (error) {

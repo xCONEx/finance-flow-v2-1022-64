@@ -1,13 +1,13 @@
+
 export interface User {
   id: string;
   email: string;
   name: string;
   avatar?: string;
   photoURL?: string;
-  userType: 'admin' | 'owner' | 'collaborator' | 'individual';
+  userType: 'admin' | 'company_owner' | 'employee' | 'individual';
   companyId?: string;
   createdAt: string;
-  uid?: string; // Added for backward compatibility
 }
 
 export interface Company {

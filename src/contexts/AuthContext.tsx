@@ -1,4 +1,5 @@
 
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword,
@@ -9,7 +10,7 @@ import {
   signInWithPopup
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
-import { firestoreService, FirestoreUser, UserContextData, AgencyData } from '../services/firestore';
+import { firestoreService, FirestoreUser } from '../services/firestore';
 import { User } from '../types';
 
 interface AuthContextType {
@@ -21,8 +22,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   loading: boolean;
   userData: FirestoreUser | null;
-  agencyData: AgencyData | null;
-  userAuthData: UserContextData | null;
+  agencyData: any | null;
   refreshUserData: () => Promise<void>;
 }
 
@@ -36,12 +36,28 @@ export const useAuth = () => {
   return context;
 };
 
+// Função para verificar se o usuário é colaborador (suporta array e map)
+const isUserCollaborator = (collaborators: any, userUID: string): boolean => {
+  if (!collaborators) return false;
+  
+  // Se for array
+  if (Array.isArray(collaborators)) {
+    return collaborators.includes(userUID);
+  }
+  
+  // Se for objeto/map
+  if (typeof collaborators === 'object') {
+    return collaborators.hasOwnProperty(userUID) && collaborators[userUID] === true;
+  }
+  
+  return false;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<FirestoreUser | null>(null);
-  const [agencyData, setAgencyData] = useState<AgencyData | null>(null);
-  const [userAuthData, setUserAuthData] = useState<UserContextData | null>(null);
+  const [agencyData, setAgencyData] = useState<any | null>(null);
 
   const refreshUserData = async () => {
     if (!user?.id) return;
@@ -52,19 +68,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const updatedUserData = await firestoreService.getUserData(user.id);
       if (updatedUserData) {
         setUserData(updatedUserData);
+        console.log('✅ Dados do usuário atualizados');
       }
       
-      const updatedAuthData = await firestoreService.getUserAuthData(user.id);
-      if (updatedAuthData) {
-        setUserAuthData(updatedAuthData);
-        
-        if (updatedAuthData.agencyId) {
-          const updatedAgencyData = await firestoreService.getAgencyData(updatedAuthData.agencyId);
-          setAgencyData(updatedAgencyData);
-        }
+      // Buscar agência do usuário
+      const userAgency = await firestoreService.getUserAgency(user.id);
+      if (userAgency) {
+        setAgencyData(userAgency);
+        console.log('✅ Dados da agência atualizados');
       }
       
-      console.log('✅ Dados atualizados com sucesso');
     } catch (error) {
       console.error('❌ Erro ao atualizar dados:', error);
     }
@@ -76,7 +89,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           console.log('🔄 Usuário autenticado, carregando dados...', firebaseUser.uid);
           
-          // Verificar se usuário existe no Firestore
           let userData = await firestoreService.getUserData(firebaseUser.uid);
           
           if (!userData) {
@@ -84,7 +96,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const newUserData: FirestoreUser = {
               email: firebaseUser.email || '',
               uid: firebaseUser.uid,
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
               logobase64: '',
               equipments: [],
               expenses: [],
@@ -94,8 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 dalilyValue: 0,
                 desiredSalary: 0,
                 workDays: 22
-              },
-              userType: 'individual'
+              }
             };
             
             await firestoreService.createUser(newUserData);
@@ -103,61 +113,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('✅ Usuário criado com dados padrão');
           }
 
-          // Obter dados de autenticação (tipo de usuário, agência, etc.)
-          const authData = await firestoreService.getUserAuthData(firebaseUser.uid);
+          // Verificar se é admin PRIMEIRO
+          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com';
           
-          if (!authData) {
-            console.error('❌ Erro ao obter dados de autenticação');
-            setUser(null);
-            setUserData(null);
+          // Buscar agência do usuário usando o serviço
+          const userAgency = await firestoreService.getUserAgency(firebaseUser.uid);
+          
+          // Determinar tipo de usuário baseado na agência encontrada
+          let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
+          
+          if (isAdmin) {
+            userType = 'admin';
+            console.log('👑 Usuário administrador identificado');
+          } else if (userAgency) {
+            // CORRIGIDO: Verificar se é dono OU colaborador
+            if (userAgency.ownerUID === firebaseUser.uid) {
+              userType = 'company_owner';
+              console.log('👑 Usuário é PROPRIETÁRIO da agência:', userAgency.id);
+            } else if (isUserCollaborator(userAgency.collaborators, firebaseUser.uid)) {
+              userType = 'employee';
+              console.log('👥 Usuário é COLABORADOR da agência:', userAgency.id);
+            }
+            
+            setAgencyData(userAgency);
+            console.log('🏢 Dados da agência definidos:', {
+              id: userAgency.id,
+              name: userAgency.name,
+              ownerUID: userAgency.ownerUID,
+              userType: userType
+            });
+          } else {
+            console.log('👤 Usuário individual (não pertence a agência)');
             setAgencyData(null);
-            setUserAuthData(null);
-            setLoading(false);
-            return;
           }
-
-          // Carregar dados da agência se necessário
-          let agencyDataToSet: AgencyData | null = null;
-          if (authData.agencyId) {
-            agencyDataToSet = await firestoreService.getAgencyData(authData.agencyId);
-            console.log('🏢 Dados da agência carregados:', agencyDataToSet?.name);
-          }
-
-          // Criar objeto User para o contexto
+          
           const appUser: User = {
             id: firebaseUser.uid,
-            email: authData.email,
-            name: authData.displayName || firebaseUser.displayName || authData.email.split('@')[0],
-            userType: authData.userType,
+            email: userData.email,
+            name: firebaseUser.displayName || userData.email.split('@')[0],
+            userType: userType,
             createdAt: new Date().toISOString(),
-            photoURL: firebaseUser.photoURL || undefined,
-            companyId: authData.agencyId
+            photoURL: firebaseUser.photoURL || undefined
           };
 
           setUser(appUser);
           setUserData(userData);
-          setUserAuthData(authData);
-          setAgencyData(agencyDataToSet);
 
-          console.log('✅ Login completo!');
-          console.log('👤 Tipo de usuário:', authData.userType);
-          console.log('📧 Email:', authData.email);
-          console.log('🏢 Agência:', authData.agencyName || 'Nenhuma');
-          console.log('🔑 Permissões:', authData.permissions || 'N/A');
+          console.log('✅ Dados do usuário carregados com sucesso!');
+          console.log('👤 Tipo de usuário FINAL:', userType);
+          console.log('📧 Email:', firebaseUser.email);
+          console.log('🏢 Agência encontrada:', userAgency ? userAgency.id : 'Nenhuma');
 
         } catch (error) {
-          console.error('❌ Erro no processo de autenticação:', error);
-          setUser(null);
-          setUserData(null);
-          setAgencyData(null);
-          setUserAuthData(null);
+          console.error('❌ Erro ao carregar dados do usuário:', error);
         }
       } else {
         console.log('👋 Usuário não autenticado');
         setUser(null);
         setUserData(null);
         setAgencyData(null);
-        setUserAuthData(null);
       }
       setLoading(false);
     });
@@ -194,7 +208,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newUserData: FirestoreUser = {
         email: email,
         uid: userCredential.user.uid,
-        name: name,
         logobase64: '',
         equipments: [],
         expenses: [],
@@ -204,8 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dalilyValue: 0,
           desiredSalary: 0,
           workDays: 22
-        },
-        userType: 'individual'
+        }
       };
 
       await firestoreService.createUser(newUserData);
@@ -237,7 +249,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       userData,
       agencyData,
-      userAuthData,
       refreshUserData
     }}>
       {children}
@@ -246,3 +257,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 export default AuthProvider;
+
