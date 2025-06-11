@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Settings as SettingsIcon, Palette, Database, Crown, Moon, Sun, BookOpen } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +20,7 @@ const Settings = () => {
     { id: 'orange-red', name: 'Laranja & Vermelho', colors: 'from-orange-600 to-red-600' }
   ];
 
-  const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'employee';
+  const isCompanyUser = user?.userType === 'owner' || user?.userType === 'collaborator';
 
   return (
     <div className="space-y-6 pb-20 md:pb-6">
