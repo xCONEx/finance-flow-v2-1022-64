@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword,
@@ -78,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
 
-          // NOVO SISTEMA: Verificar agência do usuário
+          // Verificar agência do usuário
           console.log('🏢 Verificando agência do usuário...');
           let userAgency = null;
           let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
@@ -90,8 +91,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (userAgency) {
               console.log('🏢 Usuário encontrado em agência:', userAgency.id);
               
-              // Verificar se é owner da agência
-              if (userAgency.ownerUID === firebaseUser.uid) {
+              // Verificar se é owner da agência (ID da agência = UID do usuário)
+              if (userAgency.id === firebaseUser.uid) {
                 userType = 'company_owner';
                 userRole = 'owner';
                 console.log('👑 Usuário é PROPRIETÁRIO da agência');

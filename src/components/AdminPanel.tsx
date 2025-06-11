@@ -24,7 +24,8 @@ import {
   CheckCircle,
   Clock,
   Activity,
-  Eye
+  Eye,
+  UserX
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { firestoreService } from '../services/firestore';
@@ -40,6 +41,9 @@ const AdminPanel = () => {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [editingCompany, setEditingCompany] = useState(null);
   const [showCompanyMembers, setShowCompanyMembers] = useState({});
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState('viewer');
+  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -173,12 +177,7 @@ const AdminPanel = () => {
 
       const companyData = {
         name: newCompanyName,
-        ownerUID: owner.id,
-        colaboradores: [{ uid: owner.id, email: owner.email, role: 'owner' }],
-        equipments: [],
-        expenses: [],
-        jobs: [],
-        createdAt: new Date().toISOString()
+        ownerUID: owner.id
       };
       
       const companyId = await firestoreService.createCompany(companyData);
@@ -204,11 +203,9 @@ const AdminPanel = () => {
     }
   };
 
-  // CORRIGIDO: Função para editar empresa agora usa o método correto
   const handleEditCompany = async (companyId, newData) => {
     try {
       console.log('Editando empresa:', companyId, newData);
-      // Usar o método correto para atualizar empresa, não usuário
       await firestoreService.updateCompanyField(companyId, 'name', newData.name);
       
       setCompanies(companies.map(company => 
@@ -226,6 +223,93 @@ const AdminPanel = () => {
       toast({
         title: "Erro",
         description: "Erro ao editar empresa",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteCompany = async (companyId) => {
+    try {
+      console.log('Deletando empresa:', companyId);
+      await firestoreService.deleteCompany(companyId);
+      
+      setCompanies(companies.filter(company => company.id !== companyId));
+      
+      toast({
+        title: "Sucesso",
+        description: "Empresa excluída com sucesso"
+      });
+    } catch (error) {
+      console.error('Erro ao deletar empresa:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao deletar empresa",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddMember = async (companyId) => {
+    if (!newMemberEmail || !newMemberRole) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const member = users.find(user => user.email === newMemberEmail);
+      if (!member) {
+        toast({
+          title: "Erro",
+          description: "Usuário não encontrado",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      await firestoreService.addCompanyMember(companyId, member.id, newMemberRole);
+      await firestoreService.updateUserField(member.id, 'userType', 'employee');
+      await firestoreService.updateUserField(member.id, 'companyId', companyId);
+      
+      setNewMemberEmail('');
+      setNewMemberRole('viewer');
+      setSelectedCompanyId(null);
+      await loadData();
+      
+      toast({
+        title: "Sucesso",
+        description: "Membro adicionado com sucesso"
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar membro:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar membro",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRemoveMember = async (companyId, memberId) => {
+    try {
+      await firestoreService.removeCompanyMember(companyId, memberId);
+      await firestoreService.updateUserField(memberId, 'userType', 'individual');
+      await firestoreService.updateUserField(memberId, 'companyId', null);
+      
+      await loadData();
+      
+      toast({
+        title: "Sucesso",
+        description: "Membro removido da equipe"
+      });
+    } catch (error) {
+      console.error('Erro ao remover membro:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao remover membro",
         variant: "destructive"
       });
     }
@@ -486,10 +570,12 @@ const AdminPanel = () => {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <h4 className="font-medium text-lg">{company.name}</h4>
-                        <p className="text-sm text-gray-600">Owner UID: {company.ownerUID}</p>
+                        <p className="text-sm text-gray-600">Owner UID: {company.ownerUID || company.id}</p>
                         <div className="flex gap-2 mt-2">
                           <Badge variant="outline">{company.plan || 'premium'}</Badge>
-                          <Badge variant="secondary">{company.colaboradores?.length || 0} membros</Badge>
+                          <Badge variant="secondary">
+                            {Object.keys(company.colaboradores || {}).length} membros
+                          </Badge>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -511,11 +597,62 @@ const AdminPanel = () => {
                                   onChange={(e) => setEditingCompany({ ...company, name: e.target.value })}
                                 />
                               </div>
+                              <div className="flex gap-2">
+                                <Button 
+                                  onClick={() => handleEditCompany(company.id, editingCompany)}
+                                  className="flex-1"
+                                >
+                                  Salvar Alterações
+                                </Button>
+                                <Button 
+                                  variant="destructive"
+                                  onClick={() => handleDeleteCompany(company.id)}
+                                  className="flex-1"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir Empresa
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                        
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <UserPlus className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Adicionar Colaborador</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div>
+                                <Label>Email do Colaborador</Label>
+                                <Input
+                                  value={newMemberEmail}
+                                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                                  placeholder="Digite o email"
+                                />
+                              </div>
+                              <div>
+                                <Label>Função</Label>
+                                <Select value={newMemberRole} onValueChange={setNewMemberRole}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="editor">Editor</SelectItem>
+                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                               <Button 
-                                onClick={() => handleEditCompany(company.id, editingCompany)}
+                                onClick={() => handleAddMember(company.id)} 
                                 className="w-full"
                               >
-                                Salvar Alterações
+                                Adicionar Colaborador
                               </Button>
                             </div>
                           </DialogContent>
@@ -534,12 +671,32 @@ const AdminPanel = () => {
                     {showCompanyMembers[company.id] && (
                       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                         <h5 className="font-medium mb-2">Membros da Equipe:</h5>
-                        {company.colaboradores?.map((member, index) => (
-                          <div key={index} className="flex justify-between items-center py-1">
-                            <span className="text-sm">{member.email}</span>
-                            <Badge variant="outline">{member.role}</Badge>
-                          </div>
-                        )) || <p className="text-sm text-gray-500">Nenhum membro encontrado</p>}
+                        {company.colaboradores && Object.keys(company.colaboradores).length > 0 ? (
+                          Object.entries(company.colaboradores).map(([uid, role]) => {
+                            const member = users.find(u => u.id === uid);
+                            return (
+                              <div key={uid} className="flex justify-between items-center py-2">
+                                <div>
+                                  <span className="text-sm font-medium">
+                                    {member?.email || uid}
+                                  </span>
+                                  <Badge variant="outline" className="ml-2">{role}</Badge>
+                                </div>
+                                {role !== 'owner' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRemoveMember(company.id, uid)}
+                                  >
+                                    <UserX className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-sm text-gray-500">Nenhum membro encontrado</p>
+                        )}
                       </div>
                     )}
                   </div>
