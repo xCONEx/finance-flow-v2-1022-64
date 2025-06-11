@@ -19,11 +19,14 @@ import {
   MessageCircle,
   Paperclip,
   Calendar,
-  Save
+  Save,
+  Tag
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { firestoreService } from '../services/firestore';
+import KanbanCard from './KanbanCard';
+import TagManager from './TagManager';
 
 // Definições de tipos
 interface KanbanTask {
@@ -38,6 +41,13 @@ interface KanbanTask {
   attachments: number;
   priority: 'alta' | 'média' | 'baixa';
   createdAt: string;
+  tags?: string[];
+}
+
+interface Tag {
+  id: string;
+  name: string;
+  color: string;
 }
 
 interface KanbanColumn {
@@ -50,29 +60,39 @@ interface KanbanBoard {
   [key: string]: KanbanColumn;
 }
 
-interface KanbanBoards {
-  [boardId: string]: KanbanBoard;
+interface TeamMember {
+  uid: string;
+  email: string;
+  name: string;
+  role: string;
 }
 
 const ImprovedKanban = () => {
-  const [boards, setBoards] = useState<KanbanBoards>({});
-  const [activeBoard, setActiveBoard] = useState('main');
+  const [board, setBoard] = useState<KanbanBoard>({});
+  const [tags, setTags] = useState<Tag[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskValue, setNewTaskValue] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskResponsible, setNewTaskResponsible] = useState('');
   const [newTaskType, setNewTaskType] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<'alta' | 'média' | 'baixa'>('média');
   const [selectedColumn, setSelectedColumn] = useState('todo');
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isEditingTask, setIsEditingTask] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { user, agencyData } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    loadKanbanData();
-    loadTeamMembers();
+    if (agencyData) {
+      loadKanbanData();
+      loadTeamMembers();
+    } else {
+      setIsLoading(false);
+    }
   }, [agencyData]);
 
   const loadTeamMembers = async () => {
@@ -80,7 +100,38 @@ const ImprovedKanban = () => {
     
     try {
       console.log('👥 Carregando membros da equipe...');
-      const members = agencyData.colaboradores || [];
+      const members: TeamMember[] = [];
+      
+      // Adicionar owner
+      if (agencyData.ownerUID) {
+        const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
+        if (ownerData) {
+          members.push({
+            uid: agencyData.ownerUID,
+            email: ownerData.email,
+            name: ownerData.name || ownerData.email.split('@')[0],
+            role: 'owner'
+          });
+        }
+      }
+      
+      // Adicionar colaboradores
+      if (agencyData.colaboradores && typeof agencyData.colaboradores === 'object') {
+        for (const [uid, role] of Object.entries(agencyData.colaboradores)) {
+          if (uid !== agencyData.ownerUID) { // Evitar duplicar o owner
+            const memberData = await firestoreService.getUserData(uid);
+            if (memberData) {
+              members.push({
+                uid: uid,
+                email: memberData.email,
+                name: memberData.name || memberData.email.split('@')[0],
+                role: role as string
+              });
+            }
+          }
+        }
+      }
+      
       setTeamMembers(members);
       console.log('✅ Membros carregados:', members.length);
     } catch (error) {
@@ -89,23 +140,19 @@ const ImprovedKanban = () => {
   };
 
   const loadKanbanData = async () => {
-    if (!agencyData) {
-      console.log('❌ Usuário não faz parte de uma empresa');
-      return;
-    }
+    if (!agencyData) return;
 
     try {
-      console.log('Carregando dados do Kanban para empresa:', agencyData.id);
+      console.log('📦 Carregando dados do Kanban para empresa:', agencyData.id);
       
-      // Tentar carregar board existente do Firebase
       const existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
       
-      if (existingBoard) {
+      if (existingBoard && existingBoard.columns) {
         console.log('✅ Board existente carregado do Firebase');
-        setBoards({ main: existingBoard });
+        setBoard(existingBoard.columns);
+        setTags(existingBoard.tags || []);
       } else {
         console.log('📝 Criando board inicial para empresa');
-        // Estrutura FIXA do Kanban - sequência definida
         const initialBoard: KanbanBoard = {
           'todo': {
             title: 'A Fazer',
@@ -129,32 +176,37 @@ const ImprovedKanban = () => {
           }
         };
 
-        setBoards({ main: initialBoard });
-        await saveKanbanState(initialBoard);
+        const initialTags: Tag[] = [
+          { id: 'tag_1', name: 'Urgente', color: '#EF4444' },
+          { id: 'tag_2', name: 'Importante', color: '#F59E0B' },
+          { id: 'tag_3', name: 'Baixa Prioridade', color: '#10B981' }
+        ];
+
+        setBoard(initialBoard);
+        setTags(initialTags);
+        await saveKanbanState(initialBoard, initialTags);
       }
     } catch (error) {
-      console.error('Erro ao carregar Kanban:', error);
+      console.error('❌ Erro ao carregar Kanban:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const sendNotificationToTeam = async (message: string) => {
-    if (!agencyData || !('Notification' in window)) return;
+  const saveKanbanState = async (boardData: KanbanBoard, tagsData: Tag[] = tags) => {
+    if (!agencyData) return;
 
     try {
-      // Solicitar permissão se necessário
-      if (Notification.permission === 'default') {
-        await Notification.requestPermission();
-      }
-
-      if (Notification.permission === 'granted') {
-        new Notification('FinanceFlow - Kanban', {
-          body: message,
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png'
-        });
-      }
+      console.log('💾 Salvando estado do Kanban no Firebase...');
+      const kanbanData = {
+        columns: boardData,
+        tags: tagsData,
+        updatedAt: new Date().toISOString()
+      };
+      await firestoreService.saveKanbanBoard(agencyData.id, kanbanData);
+      console.log('✅ Kanban salvo com sucesso');
     } catch (error) {
-      console.error('Erro ao enviar notificação:', error);
+      console.error('❌ Erro ao salvar Kanban:', error);
     }
   };
 
@@ -162,7 +214,6 @@ const ImprovedKanban = () => {
     if (!result.destination) return;
 
     const { source, destination } = result;
-    const board = boards[activeBoard];
     
     if (source.droppableId !== destination.droppableId) {
       // Mover entre colunas
@@ -185,20 +236,12 @@ const ImprovedKanban = () => {
         }
       };
 
-      setBoards({
-        ...boards,
-        [activeBoard]: newBoard
-      });
-
-      // Salvar no Firebase
+      setBoard(newBoard);
       await saveKanbanState(newBoard);
-      
-      // Enviar notificação
-      await sendNotificationToTeam(`Tarefa "${removed.title}" movida para ${destColumn.title}`);
       
       toast({
         title: "Sucesso",
-        description: "Tarefa movida com sucesso"
+        description: `Tarefa "${removed.title}" movida para ${destColumn.title}`
       });
     } else {
       // Reordenar na mesma coluna
@@ -215,23 +258,8 @@ const ImprovedKanban = () => {
         }
       };
 
-      setBoards({
-        ...boards,
-        [activeBoard]: newBoard
-      });
-
+      setBoard(newBoard);
       await saveKanbanState(newBoard);
-    }
-  };
-
-  const saveKanbanState = async (boardData: KanbanBoard) => {
-    if (!agencyData) return;
-
-    try {
-      console.log('Salvando estado do Kanban no Firebase...');
-      await firestoreService.saveKanbanBoard(agencyData.id, boardData);
-    } catch (error) {
-      console.error('Erro ao salvar Kanban:', error);
     }
   };
 
@@ -256,11 +284,11 @@ const ImprovedKanban = () => {
         type: newTaskType || 'Geral',
         comments: 0,
         attachments: 0,
-        priority: 'média',
-        createdAt: new Date().toISOString()
+        priority: newTaskPriority,
+        createdAt: new Date().toISOString(),
+        tags: selectedTags
       };
 
-      const board = boards[activeBoard];
       const updatedBoard = {
         ...board,
         [selectedColumn]: {
@@ -269,15 +297,8 @@ const ImprovedKanban = () => {
         }
       };
 
-      setBoards({
-        ...boards,
-        [activeBoard]: updatedBoard
-      });
-
+      setBoard(updatedBoard);
       await saveKanbanState(updatedBoard);
-
-      // Enviar notificação
-      await sendNotificationToTeam(`Nova tarefa adicionada: "${newTaskTitle}"`);
 
       // Limpar formulário
       setNewTaskTitle('');
@@ -286,13 +307,15 @@ const ImprovedKanban = () => {
       setNewTaskDeadline('');
       setNewTaskResponsible('');
       setNewTaskType('');
+      setNewTaskPriority('média');
+      setSelectedTags([]);
 
       toast({
         title: "Sucesso",
         description: "Tarefa adicionada com sucesso"
       });
     } catch (error) {
-      console.error('Erro ao adicionar tarefa:', error);
+      console.error('❌ Erro ao adicionar tarefa:', error);
       toast({
         title: "Erro",
         description: "Erro ao adicionar tarefa",
@@ -301,15 +324,12 @@ const ImprovedKanban = () => {
     }
   };
 
-  // NOVA FUNÇÃO: Salvar edições do card
   const handleSaveTaskEdit = async () => {
     if (!selectedTask) return;
 
     try {
-      const board = boards[activeBoard];
       let updatedBoard = { ...board };
 
-      // Encontrar e atualizar a tarefa em todas as colunas
       Object.keys(updatedBoard).forEach(columnId => {
         const taskIndex = updatedBoard[columnId].items.findIndex(item => item.id === selectedTask.id);
         if (taskIndex !== -1) {
@@ -317,23 +337,16 @@ const ImprovedKanban = () => {
         }
       });
 
-      setBoards({
-        ...boards,
-        [activeBoard]: updatedBoard
-      });
-
+      setBoard(updatedBoard);
       await saveKanbanState(updatedBoard);
       setIsEditingTask(false);
-
-      // Enviar notificação
-      await sendNotificationToTeam(`Tarefa "${selectedTask.title}" foi atualizada`);
 
       toast({
         title: "Sucesso",
         description: "Tarefa atualizada com sucesso"
       });
     } catch (error) {
-      console.error('Erro ao salvar tarefa:', error);
+      console.error('❌ Erro ao salvar tarefa:', error);
       toast({
         title: "Erro",
         description: "Erro ao salvar tarefa",
@@ -342,22 +355,15 @@ const ImprovedKanban = () => {
     }
   };
 
-  // NOVA FUNÇÃO: Deletar tarefa
   const handleDeleteTask = async (taskId: string) => {
     try {
-      const board = boards[activeBoard];
       let updatedBoard = { ...board };
 
-      // Remover a tarefa de todas as colunas
       Object.keys(updatedBoard).forEach(columnId => {
         updatedBoard[columnId].items = updatedBoard[columnId].items.filter(item => item.id !== taskId);
       });
 
-      setBoards({
-        ...boards,
-        [activeBoard]: updatedBoard
-      });
-
+      setBoard(updatedBoard);
       await saveKanbanState(updatedBoard);
       setSelectedTask(null);
 
@@ -366,12 +372,32 @@ const ImprovedKanban = () => {
         description: "Tarefa removida com sucesso"
       });
     } catch (error) {
-      console.error('Erro ao deletar tarefa:', error);
+      console.error('❌ Erro ao deletar tarefa:', error);
       toast({
         title: "Erro",
         description: "Erro ao deletar tarefa",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleAddTag = (tag: Tag) => {
+    const updatedTags = [...tags, tag];
+    setTags(updatedTags);
+    saveKanbanState(board, updatedTags);
+  };
+
+  const handleRemoveTag = (tagId: string) => {
+    const updatedTags = tags.filter(tag => tag.id !== tagId);
+    setTags(updatedTags);
+    saveKanbanState(board, updatedTags);
+  };
+
+  const handleTagSelect = (tagId: string) => {
+    if (selectedTags.includes(tagId)) {
+      setSelectedTags(selectedTags.filter(id => id !== tagId));
+    } else {
+      setSelectedTags([...selectedTags, tagId]);
     }
   };
 
@@ -394,9 +420,8 @@ const ImprovedKanban = () => {
     }
   };
 
-  // Garantir ordem fixa das colunas
+  // Ordem fixa das colunas
   const fixedColumnOrder = ['todo', 'inProgress', 'review', 'done'];
-  const currentBoard = boards[activeBoard] || {};
 
   // Verificar se o usuário faz parte de uma empresa
   if (!agencyData) {
@@ -411,6 +436,17 @@ const ImprovedKanban = () => {
             O Kanban de Projetos é exclusivo para membros de empresas. 
             Entre em contato com um administrador para ser adicionado a uma empresa.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando Kanban...</p>
         </div>
       </div>
     );
@@ -441,21 +477,17 @@ const ImprovedKanban = () => {
               <DialogTitle>Adicionar Nova Tarefa</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <Input
-                  placeholder="Título da tarefa"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                />
-              </div>
+              <Input
+                placeholder="Título da tarefa"
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+              />
               
-              <div>
-                <Textarea
-                  placeholder="Descrição detalhada"
-                  value={newTaskDescription}
-                  onChange={(e) => setNewTaskDescription(e.target.value)}
-                />
-              </div>
+              <Textarea
+                placeholder="Descrição detalhada"
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+              />
 
               <div className="grid grid-cols-2 gap-2">
                 <Input
@@ -476,16 +508,14 @@ const ImprovedKanban = () => {
                     <SelectValue placeholder="Responsável" />
                   </SelectTrigger>
                   <SelectContent>
-                    {teamMembers.map((member, index) => (
-                      <SelectItem key={index} value={member.email}>
-                        {member.email}
+                    {teamMembers.map((member) => (
+                      <SelectItem key={member.uid} value={member.name}>
+                        {member.name} ({member.email})
                       </SelectItem>
                     ))}
-                    <SelectItem value={user?.name || 'Eu'}>
-                      {user?.name || 'Eu'}
-                    </SelectItem>
                   </SelectContent>
                 </Select>
+                
                 <Select value={newTaskType} onValueChange={setNewTaskType}>
                   <SelectTrigger>
                     <SelectValue placeholder="Tipo" />
@@ -499,17 +529,41 @@ const ImprovedKanban = () => {
                 </Select>
               </div>
 
-              <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Coluna" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todo">A Fazer</SelectItem>
-                  <SelectItem value="inProgress">Em Produção</SelectItem>
-                  <SelectItem value="review">Em Revisão</SelectItem>
-                  <SelectItem value="done">Finalizado</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Coluna" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo">A Fazer</SelectItem>
+                    <SelectItem value="inProgress">Em Produção</SelectItem>
+                    <SelectItem value="review">Em Revisão</SelectItem>
+                    <SelectItem value="done">Finalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={newTaskPriority} onValueChange={(value: 'alta' | 'média' | 'baixa') => setNewTaskPriority(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Prioridade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="média">Média</SelectItem>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Etiquetas</label>
+                <TagManager 
+                  tags={tags}
+                  onAddTag={handleAddTag}
+                  onRemoveTag={handleRemoveTag}
+                  selectedTags={selectedTags}
+                  onTagSelect={handleTagSelect}
+                />
+              </div>
 
               <Button onClick={handleAddTask} className="w-full">
                 Adicionar Tarefa
@@ -522,7 +576,7 @@ const ImprovedKanban = () => {
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid lg:grid-cols-4 gap-6">
           {fixedColumnOrder.map((columnId) => {
-            const column = currentBoard[columnId];
+            const column = board[columnId];
             if (!column) return null;
             
             return (
@@ -548,65 +602,18 @@ const ImprovedKanban = () => {
                         {(column.items || []).map((item, index) => (
                           <Draggable key={item.id} draggableId={item.id} index={index}>
                             {(provided, snapshot) => (
-                              <Card
+                              <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                className={`bg-white shadow-sm hover:shadow-md transition-all cursor-move ${
-                                  snapshot.isDragging ? 'rotate-2 shadow-lg' : ''
-                                }`}
-                                onClick={() => setSelectedTask(item)}
                               >
-                                <CardContent className="p-4 space-y-3">
-                                  <div className="flex justify-between items-start">
-                                    <h4 className="font-medium text-sm leading-tight">{item.title}</h4>
-                                    <div className="flex gap-1">
-                                      <Badge className={getTypeColor(item.type)} variant="secondary">
-                                        {item.type}
-                                      </Badge>
-                                    </div>
-                                  </div>
-
-                                  <p className="text-xs text-gray-600 line-clamp-2">{item.description}</p>
-                                  
-                                  <div className="space-y-2 text-xs text-gray-600">
-                                    <div className="flex items-center gap-2">
-                                      <DollarSign className="h-3 w-3" />
-                                      <span className="font-semibold text-green-600">{item.value}</span>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-2">
-                                      <Clock className="h-3 w-3" />
-                                      <span>{item.deadline}</span>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-2">
-                                      <User className="h-3 w-3" />
-                                      <span>{item.responsible}</span>
-                                    </div>
-
-                                    <div className="flex items-center justify-between pt-2">
-                                      <div className="flex gap-2">
-                                        {item.comments > 0 && (
-                                          <span className="flex items-center gap-1">
-                                            <MessageCircle className="h-3 w-3" />
-                                            {item.comments}
-                                          </span>
-                                        )}
-                                        {item.attachments > 0 && (
-                                          <span className="flex items-center gap-1">
-                                            <Paperclip className="h-3 w-3" />
-                                            {item.attachments}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <Badge className={getPriorityColor(item.priority)} variant="secondary">
-                                        {item.priority}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
+                                <KanbanCard
+                                  task={item}
+                                  tags={tags}
+                                  onClick={() => setSelectedTask(item)}
+                                  isDragging={snapshot.isDragging}
+                                />
+                              </div>
                             )}
                           </Draggable>
                         ))}
@@ -709,20 +716,61 @@ const ImprovedKanban = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {teamMembers.map((member, index) => (
-                        <SelectItem key={index} value={member.email}>
-                          {member.email}
+                      {teamMembers.map((member) => (
+                        <SelectItem key={member.uid} value={member.name}>
+                          {member.name} ({member.email})
                         </SelectItem>
                       ))}
-                      <SelectItem value={user?.name || 'Eu'}>
-                        {user?.name || 'Eu'}
-                      </SelectItem>
                     </SelectContent>
                   </Select>
                 ) : (
                   <p className="text-sm text-gray-600">{selectedTask.responsible}</p>
                 )}
               </div>
+
+              <div>
+                <label className="text-sm font-medium">Prioridade</label>
+                {isEditingTask ? (
+                  <Select
+                    value={selectedTask.priority}
+                    onValueChange={(value: 'alta' | 'média' | 'baixa') => setSelectedTask({...selectedTask, priority: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alta">Alta</SelectItem>
+                      <SelectItem value="média">Média</SelectItem>
+                      <SelectItem value="baixa">Baixa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge className={getPriorityColor(selectedTask.priority)} variant="secondary">
+                    {selectedTask.priority}
+                  </Badge>
+                )}
+              </div>
+
+              {selectedTask.tags && selectedTask.tags.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium">Etiquetas</label>
+                  <div className="flex gap-1 flex-wrap mt-1">
+                    {selectedTask.tags.map(tagId => {
+                      const tag = tags.find(t => t.id === tagId);
+                      if (!tag) return null;
+                      return (
+                        <Badge
+                          key={tag.id}
+                          style={{ backgroundColor: tag.color, color: 'white' }}
+                          className="text-xs"
+                        >
+                          {tag.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {isEditingTask && (
                 <Button onClick={handleSaveTaskEdit} className="w-full">
