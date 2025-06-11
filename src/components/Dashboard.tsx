@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -188,7 +189,6 @@ const Dashboard = () => {
 
         {/* Recent Jobs */}
         <Card className="lg:col-span-2 transition-all duration-300 hover:shadow-lg">
-
           <CardContent>
             <RecentJobs />
           </CardContent>
@@ -283,5 +283,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-
-</edits_to_apply>
