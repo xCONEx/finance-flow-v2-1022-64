@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,7 +24,7 @@ const Dashboard = () => {
 
   // CORRIGIDO: Dashboard sempre usa dados pessoais do usuário
   // Apenas Kanban e Equipe são compartilhados com a empresa
-  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
+  const isCompanyUser = (user?.userType === 'owner' || user?.userType === 'collaborator') && !!agencyData;
   
   // Dashboard sempre mostra dados pessoais
   const currentData = userData;
@@ -33,7 +32,6 @@ const Dashboard = () => {
   // CORRIGIDO: Modal para adicionar valor manual
 const [showManualModal, setShowManualModal] = useState(false);
 const [showExpenseModal, setShowExpenseModal] = useState(false);
-
 
   // CORRIGIDO: Filtrar apenas jobs pessoais (sem companyId)
   const filteredJobs = jobs.filter(job => !job.companyId);
@@ -285,3 +283,5 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
 };
 
 export default Dashboard;
+
+</edits_to_apply>
