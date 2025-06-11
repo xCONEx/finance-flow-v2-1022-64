@@ -9,6 +9,7 @@ import {
   query, 
   where,
   addDoc,
+  limit,
   serverTimestamp,
   writeBatch
 } from 'firebase/firestore';
@@ -48,7 +49,25 @@ export const firestoreService = {
       throw error;
     }
   },
+async getUserByEmail(email: string) {
+  try {
+    console.log('🔍 Buscando usuário por e-mail:', email);
+    const usersRef = collection(db, 'usuarios');
+    const q = query(usersRef, where('email', '==', email), limit(1));
+    const snapshot = await getDocs(q);
 
+    if (!snapshot.empty) {
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() };
+    } else {
+      console.warn('⚠️ Nenhum usuário encontrado com o email:', email);
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Erro ao buscar usuário por e-mail:', error);
+    throw error;
+  }
+},
   async updateUserField(uid: string, field: string, value: any) {
     try {
       console.log(`Atualizando campo ${field} do usuário ${uid}`);
@@ -162,6 +181,13 @@ export const firestoreService = {
     }
   },
 
+async getCompanyInvites(companyId: string): Promise<any[]> {
+  const invitesRef = collection(db, 'invites');
+  const q = query(invitesRef, where('companyId', '==', companyId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+},
+
   async updateCompanyField(companyId: string, field: string, value: any) {
     try {
       console.log(`💾 Atualizando ${field} da empresa ${companyId}`);
@@ -239,6 +265,7 @@ export const firestoreService = {
     }
   },
 
+  
   async getUserInvites(userEmail: string) {
     try {
       console.log('📨 Buscando convites para:', userEmail);

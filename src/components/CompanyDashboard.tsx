@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Users, 
+  
   Mail, 
   Plus, 
   UserCheck, 
@@ -82,47 +83,57 @@ const CompanyDashboard = () => {
     }
   };
 
-  const handleSendInvite = async () => {
-    if (!inviteEmail || !agencyData) {
+ const handleAddMemberDirect = async () => {
+  if (!inviteEmail || !agencyData) {
+    toast({
+      title: "Erro",
+      description: "Digite um email válido",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  try {
+    console.log('🔍 Procurando usuário com e-mail:', inviteEmail);
+    const userBasic = await firestoreService.getUserByEmail(inviteEmail);
+
+    if (!userBasic) {
       toast({
-        title: "Erro",
-        description: "Digite um email válido",
+        title: "Usuário não encontrado",
+        description: "Esse e-mail ainda não está cadastrado na plataforma.",
         variant: "destructive"
       });
       return;
     }
 
-    try {
-      console.log('Enviando convite para:', inviteEmail, 'Role:', inviteRole);
-      
-      const inviteData = {
-        email: inviteEmail,
-        companyId: agencyData.id,
-        companyName: agencyData.name || 'Empresa',
-        invitedBy: user?.email,
-        role: inviteRole,
-        status: 'pending'
-      };
+    console.log('👤 Usuário encontrado:', userBasic);
 
-      await firestoreService.sendInvite(inviteData);
-      
-      setInviteEmail('');
-      setInviteRole('viewer');
-      await loadCompanyData(); // Recarregar dados
+    // Buscar dados completos do usuário para obter o nome
+    const userData = await firestoreService.getUserData(userBasic.id);
+
+    await firestoreService.addCompanyMember(agencyData.id, userBasic.id, inviteRole);
+
+    setInviteEmail('');
+    setInviteRole('viewer');
+    await loadCompanyData();
+
+    const displayName = userData?.name?.trim() || inviteEmail?.trim() || 'Desconhecido';
 
       toast({
-        title: "Sucesso",
-        description: `Convite enviado com permissão de ${getRoleLabel(inviteRole)}!`
-      });
-    } catch (error) {
-      console.error('Erro ao enviar convite:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao enviar convite",
-        variant: "destructive"
-      });
-    }
-  };
+  title: "Sucesso",
+  description: `Membro ${displayName} adicionado como ${getRoleLabel(inviteRole)}!`
+});
+
+  } catch (error) {
+    console.error('❌ Erro ao adicionar membro diretamente:', error);
+    toast({
+      title: "Erro",
+      description: "Erro ao adicionar membro. Verifique as permissões.",
+      variant: "destructive"
+    });
+  }
+};
+
 
   const handleRemoveMember = async (memberId) => {
     try {
@@ -263,43 +274,44 @@ const CompanyDashboard = () => {
                           </SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button onClick={handleSendInvite} className="w-full">
-                        <Send className="h-4 w-4 mr-2" />
-                        Enviar Convite
-                      </Button>
+                      <Button onClick={handleAddMemberDirect} className="w-full">
+  <UserCheck className="h-4 w-4 mr-2" />
+  Adicionar Membro
+</Button>
                     </div>
                   </DialogContent>
                 </Dialog>
               )}
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {teamMembers.map((member) => (
-                  <div key={member.uid} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">{member.name}</h4>
-                      <p className="text-sm text-gray-600">{member.email}</p>
-                      <div className="flex gap-2 mt-2">
-                        <Badge variant="outline" className="flex items-center gap-1">
-                          {getRoleIcon(member.role)}
-                          {getRoleLabel(member.role)}
-                        </Badge>
-                        <Badge variant="secondary">Ativo</Badge>
-                      </div>
-                    </div>
-                    {canRemoveMembers(currentUserRole, member.role) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRemoveMember(member.uid)}
-                      >
-                        Remover
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
+  <div className="space-y-4">
+    {teamMembers.map((member, index) => (
+      <div key={`${member.uid}-${index}`} className="flex items-center justify-between p-4 border rounded-lg">
+        <div>
+          <h4 className="font-medium">{member.name}</h4>
+          <p className="text-sm text-gray-600">{member.email}</p>
+          <div className="flex gap-2 mt-2">
+            <Badge variant="outline" className="flex items-center gap-1">
+              {getRoleIcon(member.role)}
+              {getRoleLabel(member.role)}
+            </Badge>
+            <Badge variant="secondary">Ativo</Badge>
+          </div>
+        </div>
+        {canRemoveMembers(currentUserRole, member.role) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRemoveMember(member.uid)}
+          >
+            Remover
+          </Button>
+        )}
+      </div>
+    ))}
+  </div>
+</CardContent>
+
           </Card>
         </TabsContent>
 

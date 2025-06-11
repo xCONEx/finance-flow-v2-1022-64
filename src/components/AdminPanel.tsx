@@ -680,7 +680,7 @@ const AdminPanel = () => {
                                   <span className="text-sm font-medium">
                                     {member?.email || uid}
                                   </span>
-                                  <Badge variant="outline" className="ml-2">{role}</Badge>
+                                  <Badge variant="outline" className="ml-2">{String(role)}</Badge>
                                 </div>
                                 {role !== 'owner' && (
                                   <Button
