@@ -78,66 +78,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
 
-          // CORRIGIDO: Verificação mais robusta para proprietário da agência
-          console.log('🏢 Verificando se usuário pertence a uma agência...');
+          // NOVO SISTEMA: Verificar agência do usuário
+          console.log('🏢 Verificando agência do usuário...');
           let userAgency = null;
           let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
+          let userRole = null;
           
           try {
-            // Buscar por agências onde o usuário é colaborador
-            const allAgencies = await firestoreService.getAllAgencies();
-            console.log('🔍 Verificando agências:', allAgencies.length);
-            
-            for (const agency of allAgencies) {
-              const agencyData = agency as any; // Type assertion to avoid TypeScript errors
-              
-              console.log('🔍 Verificando agência:', agencyData.id, {
-                ownerId: agencyData.ownerId,
-                ownerUID: agencyData.ownerUID,
-                owner: agencyData.owner,
-                userUID: firebaseUser.uid,
-                userEmail: firebaseUser.email
-              });
-              
-              // CORRIGIDO: Verificar múltiplos campos possíveis para proprietário
-              const isOwner = (
-                (agencyData.ownerId && agencyData.ownerId === firebaseUser.uid) ||
-                (agencyData.ownerUID && agencyData.ownerUID === firebaseUser.uid) ||
-                (agencyData.owner && agencyData.owner === firebaseUser.uid) ||
-                (agencyData.owner && agencyData.owner === firebaseUser.email) ||
-                (agencyData.ownerId && agencyData.ownerId === firebaseUser.email)
-              );
-              
-              if (isOwner) {
-                userAgency = agencyData;
-                userType = 'company_owner';
-                console.log('👑 Usuário é DONO da agência:', agencyData.id);
-                console.log('✅ Tipo identificado: PROPRIETÁRIO');
-                break;
-              }
-              
-              // Verificar se é colaborador
-              if (agencyData.colaboradores && Array.isArray(agencyData.colaboradores)) {
-                const isCollaborator = agencyData.colaboradores.some((colab: any) => 
-                  colab.uid === firebaseUser.uid || colab.email === firebaseUser.email
-                );
-                
-                if (isCollaborator) {
-                  userAgency = agencyData;
-                  userType = 'employee';
-                  console.log('👥 Usuário é colaborador da agência:', agencyData.id);
-                  break;
-                }
-              }
-            }
+            userAgency = await firestoreService.getUserAgency(firebaseUser.uid);
             
             if (userAgency) {
               console.log('🏢 Usuário encontrado em agência:', userAgency.id);
+              
+              // Verificar se é owner da agência
+              if (userAgency.ownerUID === firebaseUser.uid) {
+                userType = 'company_owner';
+                userRole = 'owner';
+                console.log('👑 Usuário é PROPRIETÁRIO da agência');
+              } else if (userAgency.colaboradores && userAgency.colaboradores[firebaseUser.uid]) {
+                // Verificar role do colaborador
+                userRole = userAgency.colaboradores[firebaseUser.uid];
+                userType = 'employee';
+                console.log('👥 Usuário é colaborador da agência, role:', userRole);
+              }
+              
               console.log('📦 Dados da agência carregados:', {
                 equipments: userAgency.equipments?.length || 0,
                 expenses: userAgency.expenses?.length || 0,
                 jobs: userAgency.jobs?.length || 0,
-                colaboradores: userAgency.colaboradores?.length || 0
+                colaboradores: Object.keys(userAgency.colaboradores || {}).length,
+                kanbanBoard: userAgency.kanbanBoard ? 'presente' : 'ausente'
               });
               setAgencyData(userAgency);
             } else {
@@ -146,12 +116,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             
           } catch (error) {
-            console.error('❌ Erro ao buscar agências:', error);
+            console.error('❌ Erro ao buscar agência:', error);
             setAgencyData(null);
           }
 
           // Verificar se é admin
-          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com';
+          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
           if (isAdmin) {
             userType = 'admin';
           }
@@ -171,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           console.log('✅ Dados do usuário carregados com sucesso!');
           console.log('👤 Tipo de usuário FINAL:', userType);
+          console.log('🎭 Role do usuário:', userRole);
           if (isAdmin) {
             console.log('👑 Usuário administrador identificado');
           }
@@ -266,3 +237,5 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
+
+export default AuthProvider;

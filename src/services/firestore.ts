@@ -97,21 +97,44 @@ export const firestoreService = {
 
   async getUserAgency(uid: string) {
     try {
-      console.log('Verificando agência do usuário:', uid);
-      const agenciasRef = collection(db, 'agencias');
-      const q = query(agenciasRef, where('colaboradores', 'array-contains', uid));
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        const agencyDoc = snapshot.docs[0];
-        console.log('Agência encontrada:', agencyDoc.id);
-        return { id: agencyDoc.id, ...agencyDoc.data() };
-      } else {
-        console.log('Usuário não pertence a nenhuma agência');
-        return null;
+      console.log('🏢 Verificando agência do usuário:', uid);
+      
+      // Primeira tentativa: verificar se existe uma agência com este UID como documento
+      const userAgencyRef = doc(db, 'agencias', uid);
+      const userAgencyDoc = await getDoc(userAgencyRef);
+      
+      if (userAgencyDoc.exists()) {
+        const agencyData = userAgencyDoc.data();
+        console.log('✅ Agência encontrada pelo UID do usuário:', uid);
+        return { id: userAgencyDoc.id, ...agencyData };
       }
+
+      // Segunda tentativa: buscar em todas as agências como colaborador
+      const agenciasRef = collection(db, 'agencias');
+      const snapshot = await getDocs(agenciasRef);
+      
+      for (const agencyDoc of snapshot.docs) {
+        const agencyData = agencyDoc.data();
+        
+        // Verificar se é owner
+        if (agencyData.ownerUID === uid) {
+          console.log('✅ Usuário é proprietário da agência:', agencyDoc.id);
+          return { id: agencyDoc.id, ...agencyData };
+        }
+        
+        // Verificar colaboradores (nova estrutura com roles)
+        if (agencyData.colaboradores && typeof agencyData.colaboradores === 'object') {
+          if (agencyData.colaboradores[uid]) {
+            console.log('✅ Usuário é colaborador da agência:', agencyDoc.id, 'Role:', agencyData.colaboradores[uid]);
+            return { id: agencyDoc.id, ...agencyData };
+          }
+        }
+      }
+
+      console.log('❌ Usuário não pertence a nenhuma agência');
+      return null;
     } catch (error) {
-      console.error('Erro ao verificar agência:', error);
+      console.error('❌ Erro ao verificar agência:', error);
       throw error;
     }
   },
@@ -175,7 +198,7 @@ export const firestoreService = {
   async sendInvite(inviteData: any) {
     try {
       console.log('📧 Enviando convite:', inviteData);
-      const invitesRef = collection(db, 'convites');
+      const invitesRef = collection(db, 'invites');
       
       const newInvite = {
         ...inviteData,
@@ -195,7 +218,7 @@ export const firestoreService = {
   async getCompanyInvites(companyId: string) {
     try {
       console.log('📋 Buscando convites da empresa:', companyId);
-      const invitesRef = collection(db, 'convites');
+      const invitesRef = collection(db, 'invites');
       const q = query(invitesRef, where('companyId', '==', companyId));
       const snapshot = await getDocs(q);
       
@@ -220,12 +243,13 @@ export const firestoreService = {
       
       if (agencyDoc.exists()) {
         const data = agencyDoc.data();
-        const colaboradores = data.colaboradores || [];
+        const colaboradores = data.colaboradores || {};
         
-        const updatedColaboradores = colaboradores.filter(colab => colab.uid !== memberId);
+        // Remover colaborador do objeto
+        delete colaboradores[memberId];
         
         await updateDoc(agencyRef, {
-          colaboradores: updatedColaboradores,
+          colaboradores: colaboradores,
           updatedAt: serverTimestamp()
         });
         
@@ -320,12 +344,10 @@ export const firestoreService = {
         this.getAllCompanies()
       ]);
 
-      // Calcular métricas básicas
       const totalUsers = users.length;
       const totalCompanies = companies.length;
       const activeUsers = users.filter(u => !u.banned).length;
       
-      // Análise por tipo de usuário
       const userTypes = {
         individual: users.filter(u => u.userType === 'individual').length,
         company_owner: users.filter(u => u.userType === 'company_owner').length,
@@ -333,7 +355,6 @@ export const firestoreService = {
         admin: users.filter(u => u.userType === 'admin').length
       };
 
-      // Análise de planos
       const subscriptionStats = {
         free: users.filter(u => !u.subscription || u.subscription === 'free').length,
         premium: users.filter(u => u.subscription === 'premium').length,
@@ -437,10 +458,10 @@ export const firestoreService = {
   async getUserInvites(userEmail: string) {
     try {
       console.log('📨 Buscando convites para:', userEmail);
-      const invitesRef = collection(db, 'convites');
+      const invitesRef = collection(db, 'invites');
       const q = query(
         invitesRef, 
-        where('invitedEmail', '==', userEmail),
+        where('email', '==', userEmail),
         where('status', '==', 'pending')
       );
       const snapshot = await getDocs(q);
@@ -462,22 +483,30 @@ export const firestoreService = {
     try {
       console.log('✅ Aceitando convite:', inviteId);
       
+      // Buscar dados do convite
+      const inviteRef = doc(db, 'invites', inviteId);
+      const inviteDoc = await getDoc(inviteRef);
+      
+      if (!inviteDoc.exists()) {
+        throw new Error('Convite não encontrado');
+      }
+      
+      const inviteData = inviteDoc.data();
+      const role = inviteData.role || 'viewer'; // Default role
+      
       // Atualizar status do convite
       await this.updateInviteStatus(inviteId, 'accepted');
       
-      // Adicionar usuário à empresa
+      // Adicionar usuário à empresa com role
       const companyData = await this.getAgencyData(companyId);
-      if (companyData && companyData.colaboradores) {
+      if (companyData) {
         const userData = await this.getUserData(userId);
         if (userData) {
-          const newCollaborator = {
-            uid: userId,
-            email: userData.email,
-            role: 'employee'
-          };
+          // Nova estrutura: colaboradores como objeto com roles
+          const colaboradores = companyData.colaboradores || {};
+          colaboradores[userId] = role; // UID -> role
           
-          const updatedCollaborators = [...companyData.colaboradores, newCollaborator];
-          await this.updateCompanyField(companyId, 'colaboradores', updatedCollaborators);
+          await this.updateCompanyField(companyId, 'colaboradores', colaboradores);
           
           // Atualizar tipo do usuário
           await this.updateUserField(userId, 'userType', 'employee');
@@ -495,7 +524,7 @@ export const firestoreService = {
   async updateInviteStatus(inviteId: string, status: string) {
     try {
       console.log('📝 Atualizando status do convite:', inviteId, status);
-      const inviteRef = doc(db, 'convites', inviteId);
+      const inviteRef = doc(db, 'invites', inviteId);
       await updateDoc(inviteRef, {
         status,
         updatedAt: serverTimestamp()

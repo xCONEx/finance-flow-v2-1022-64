@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
@@ -13,7 +14,10 @@ import {
   UserCheck, 
   Building2,
   Crown,
-  Send
+  Send,
+  Shield,
+  Eye,
+  Edit
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,7 +25,7 @@ import { firestoreService } from '../services/firestore';
 
 const CompanyDashboard = () => {
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('employee');
+  const [inviteRole, setInviteRole] = useState('viewer');
   const [pendingInvites, setPendingInvites] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const { user, agencyData } = useAuth();
@@ -37,8 +41,37 @@ const CompanyDashboard = () => {
     try {
       console.log('Carregando dados da empresa...');
       
-      // Carregar membros da equipe
-      const members = agencyData.colaboradores || [];
+      // Carregar membros da equipe (nova estrutura com roles)
+      const members = [];
+      
+      // Adicionar owner
+      if (agencyData.ownerUID) {
+        const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
+        if (ownerData) {
+          members.push({
+            uid: agencyData.ownerUID,
+            email: ownerData.email,
+            name: ownerData.name || ownerData.email.split('@')[0],
+            role: 'owner'
+          });
+        }
+      }
+      
+      // Adicionar colaboradores com suas roles
+      if (agencyData.colaboradores && typeof agencyData.colaboradores === 'object') {
+        for (const [uid, role] of Object.entries(agencyData.colaboradores)) {
+          const memberData = await firestoreService.getUserData(uid);
+          if (memberData) {
+            members.push({
+              uid: uid,
+              email: memberData.email,
+              name: memberData.name || memberData.email.split('@')[0],
+              role: role
+            });
+          }
+        }
+      }
+      
       setTeamMembers(members);
 
       // Carregar convites pendentes
@@ -60,7 +93,7 @@ const CompanyDashboard = () => {
     }
 
     try {
-      console.log('Enviando convite para:', inviteEmail);
+      console.log('Enviando convite para:', inviteEmail, 'Role:', inviteRole);
       
       const inviteData = {
         email: inviteEmail,
@@ -74,11 +107,12 @@ const CompanyDashboard = () => {
       await firestoreService.sendInvite(inviteData);
       
       setInviteEmail('');
+      setInviteRole('viewer');
       await loadCompanyData(); // Recarregar dados
 
       toast({
         title: "Sucesso",
-        description: "Convite enviado com sucesso!"
+        description: `Convite enviado com permissão de ${getRoleLabel(inviteRole)}!`
       });
     } catch (error) {
       console.error('Erro ao enviar convite:', error);
@@ -111,7 +145,39 @@ const CompanyDashboard = () => {
     }
   };
 
-  const isOwner = user?.userType === 'company_owner';
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 'owner': return 'Proprietário';
+      case 'editor': return 'Editor';
+      case 'viewer': return 'Visualizador';
+      default: return 'Colaborador';
+    }
+  };
+
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case 'owner': return <Crown className="h-4 w-4 text-yellow-600" />;
+      case 'editor': return <Edit className="h-4 w-4 text-blue-600" />;
+      case 'viewer': return <Eye className="h-4 w-4 text-gray-600" />;
+      default: return <Shield className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
+  const canInviteMembers = (userRole) => {
+    // Apenas owners podem convidar outros membros
+    return userRole === 'owner';
+  };
+
+  const canRemoveMembers = (userRole, targetRole) => {
+    // Apenas owners podem remover membros, e não podem remover outros owners
+    return userRole === 'owner' && targetRole !== 'owner';
+  };
+
+  // Determinar role do usuário atual
+  const currentUserRole = agencyData?.ownerUID === user?.id ? 'owner' : 
+    agencyData?.colaboradores?.[user?.id] || 'viewer';
+
+  const isOwner = currentUserRole === 'owner';
 
   return (
     <div className="space-y-6">
@@ -143,8 +209,8 @@ const CompanyDashboard = () => {
         
         <Card>
           <CardContent className="p-4 text-center">
-            <Crown className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
-            <p className="text-sm font-medium">{isOwner ? 'Proprietário' : 'Colaborador'}</p>
+            {getRoleIcon(currentUserRole)}
+            <p className="text-sm font-medium mt-2">{getRoleLabel(currentUserRole)}</p>
             <p className="text-xs text-gray-600">Seu Papel</p>
           </CardContent>
         </Card>
@@ -160,7 +226,7 @@ const CompanyDashboard = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Membros da Equipe</CardTitle>
-              {isOwner && (
+              {canInviteMembers(currentUserRole) && (
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button>
@@ -178,6 +244,25 @@ const CompanyDashboard = () => {
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
                       />
+                      <Select value={inviteRole} onValueChange={setInviteRole}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecionar permissão" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="editor">
+                            <div className="flex items-center gap-2">
+                              <Edit className="h-4 w-4 text-blue-600" />
+                              Editor - Pode editar projetos e tarefas
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="viewer">
+                            <div className="flex items-center gap-2">
+                              <Eye className="h-4 w-4 text-gray-600" />
+                              Visualizador - Apenas visualizar
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button onClick={handleSendInvite} className="w-full">
                         <Send className="h-4 w-4 mr-2" />
                         Enviar Convite
@@ -192,14 +277,17 @@ const CompanyDashboard = () => {
                 {teamMembers.map((member) => (
                   <div key={member.uid} className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <h4 className="font-medium">{member.name || member.email}</h4>
+                      <h4 className="font-medium">{member.name}</h4>
                       <p className="text-sm text-gray-600">{member.email}</p>
                       <div className="flex gap-2 mt-2">
-                        <Badge variant="outline">{member.role || 'Colaborador'}</Badge>
+                        <Badge variant="outline" className="flex items-center gap-1">
+                          {getRoleIcon(member.role)}
+                          {getRoleLabel(member.role)}
+                        </Badge>
                         <Badge variant="secondary">Ativo</Badge>
                       </div>
                     </div>
-                    {isOwner && (
+                    {canRemoveMembers(currentUserRole, member.role) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -232,10 +320,16 @@ const CompanyDashboard = () => {
                     <div key={invite.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <h4 className="font-medium">{invite.email}</h4>
-                        <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt).toLocaleDateString()}</p>
-                        <Badge variant="outline" className="mt-2">
-                          {invite.status === 'pending' ? 'Aguardando' : invite.status}
-                        </Badge>
+                        <p className="text-sm text-gray-600">Enviado em {new Date(invite.sentAt?.toDate?.() || invite.sentAt).toLocaleDateString()}</p>
+                        <div className="flex gap-2 mt-2">
+                          <Badge variant="outline" className="flex items-center gap-1">
+                            {getRoleIcon(invite.role)}
+                            {getRoleLabel(invite.role)}
+                          </Badge>
+                          <Badge variant="outline">
+                            {invite.status === 'pending' ? 'Aguardando' : invite.status}
+                          </Badge>
+                        </div>
                       </div>
                       {isOwner && (
                         <Button variant="outline" size="sm">

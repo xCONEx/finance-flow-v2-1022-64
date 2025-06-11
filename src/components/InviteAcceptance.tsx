@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Mail, Building2, UserCheck, X } from 'lucide-react';
+import { Mail, Building2, UserCheck, X, Crown, Edit, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { firestoreService } from '../services/firestore';
@@ -83,6 +83,24 @@ const InviteAcceptance = () => {
     }
   };
 
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 'owner': return 'Proprietário';
+      case 'editor': return 'Editor';
+      case 'viewer': return 'Visualizador';
+      default: return 'Colaborador';
+    }
+  };
+
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case 'owner': return <Crown className="h-4 w-4 text-yellow-600" />;
+      case 'editor': return <Edit className="h-4 w-4 text-blue-600" />;
+      case 'viewer': return <Eye className="h-4 w-4 text-gray-600" />;
+      default: return <UserCheck className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-32">
@@ -117,11 +135,24 @@ const InviteAcceptance = () => {
               </p>
               <p className="text-sm">
                 <strong>Função:</strong> 
-                <Badge variant="outline" className="ml-2">{invite.role}</Badge>
+                <Badge variant="outline" className="ml-2 flex items-center gap-1 w-fit">
+                  {getRoleIcon(invite.role)}
+                  {getRoleLabel(invite.role)}
+                </Badge>
               </p>
               <p className="text-sm">
-                <strong>Data do convite:</strong> {new Date(invite.sentAt).toLocaleDateString()}
+                <strong>Data do convite:</strong> {new Date(invite.sentAt?.toDate?.() || invite.sentAt).toLocaleDateString()}
               </p>
+              {invite.role === 'editor' && (
+                <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded">
+                  Como Editor, você poderá criar e editar projetos, tarefas e acessar o dashboard da empresa.
+                </p>
+              )}
+              {invite.role === 'viewer' && (
+                <p className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
+                  Como Visualizador, você poderá ver projetos e tarefas, mas não editá-los.
+                </p>
+              )}
             </div>
             
             <div className="flex gap-3">
