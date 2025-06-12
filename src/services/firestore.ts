@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -382,6 +381,11 @@ export const firestoreService = {
       return null;
     } catch (error) {
       console.error('❌ Erro ao buscar board do Kanban:', error);
+      // Se for erro de permissão, retorna null para criar um board inicial
+      if (error.code === 'permission-denied') {
+        console.log('⚠️ Sem permissão para acessar board, retornando null');
+        return null;
+      }
       throw error;
     }
   },

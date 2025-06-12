@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -99,43 +98,29 @@ const ImprovedKanban = () => {
     if (!agencyData) return;
     
     try {
-      console.log('👥 Carregando membros da equipe...');
-      const members: TeamMember[] = [];
+      console.log('👥 Carregando membros da equipe usando novo método...');
+      const members = await firestoreService.getCompanyMembers(agencyData.id);
       
-      // Adicionar owner
-      if (agencyData.ownerUID) {
-        const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
-        if (ownerData) {
-          members.push({
-            uid: agencyData.ownerUID,
-            email: ownerData.email,
-            name: ownerData.name || ownerData.email.split('@')[0],
-            role: 'owner'
-          });
-        }
-      }
+      const formattedMembers: TeamMember[] = members.map(member => ({
+        uid: member.uid,
+        email: member.email || 'Email não disponível',
+        name: member.name || member.email?.split('@')[0] || 'Nome não disponível',
+        role: member.role
+      }));
       
-      // Adicionar colaboradores
-      if (agencyData.colaboradores && typeof agencyData.colaboradores === 'object') {
-        for (const [uid, role] of Object.entries(agencyData.colaboradores)) {
-          if (uid !== agencyData.ownerUID) { // Evitar duplicar o owner
-            const memberData = await firestoreService.getUserData(uid);
-            if (memberData) {
-              members.push({
-                uid: uid,
-                email: memberData.email,
-                name: memberData.name || memberData.email.split('@')[0],
-                role: role as string
-              });
-            }
-          }
-        }
-      }
-      
-      setTeamMembers(members);
-      console.log('✅ Membros carregados:', members.length);
+      setTeamMembers(formattedMembers);
+      console.log('✅ Membros carregados:', formattedMembers.length);
     } catch (error) {
       console.error('❌ Erro ao carregar membros da equipe:', error);
+      // Fallback: adicionar pelo menos o owner atual
+      if (user) {
+        setTeamMembers([{
+          uid: user.id,
+          email: user.email,
+          name: user.name,
+          role: 'owner'
+        }]);
+      }
     }
   };
 
@@ -184,10 +169,26 @@ const ImprovedKanban = () => {
 
         setBoard(initialBoard);
         setTags(initialTags);
-        await saveKanbanState(initialBoard, initialTags);
+        
+        // Tentar salvar o board inicial
+        try {
+          await saveKanbanState(initialBoard, initialTags);
+        } catch (saveError) {
+          console.warn('⚠️ Não foi possível salvar o board inicial, mas continuando...', saveError);
+        }
       }
     } catch (error) {
       console.error('❌ Erro ao carregar Kanban:', error);
+      // Em caso de erro, criar um board local temporário
+      const fallbackBoard: KanbanBoard = {
+        'todo': { title: 'A Fazer', color: 'bg-red-50 border-red-200', items: [] },
+        'inProgress': { title: 'Em Produção', color: 'bg-yellow-50 border-yellow-200', items: [] },
+        'review': { title: 'Em Revisão', color: 'bg-blue-50 border-blue-200', items: [] },
+        'done': { title: 'Finalizado', color: 'bg-green-50 border-green-200', items: [] }
+      };
+      
+      setBoard(fallbackBoard);
+      setTags([]);
     } finally {
       setIsLoading(false);
     }
@@ -207,6 +208,14 @@ const ImprovedKanban = () => {
       console.log('✅ Kanban salvo com sucesso');
     } catch (error) {
       console.error('❌ Erro ao salvar Kanban:', error);
+      // Não mostrar erro para o usuário se for problema de permissão
+      if (error.code !== 'permission-denied') {
+        toast({
+          title: "Aviso",
+          description: "Não foi possível salvar as alterações automaticamente",
+          variant: "destructive"
+        });
+      }
     }
   };
 
