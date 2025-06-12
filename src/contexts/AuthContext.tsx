@@ -130,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const allAgencies = await firestoreService.getAllAgencias();
                 
                 // Verificar se alguma agência é proprietária do usuário (baseado no ownerUID)
-                const ownedAgency = allAgencies.find(agency => agency.ownerUID === firebaseUser.uid);
+                const ownedAgency = allAgencies.find((agency: any) => agency.ownerUID === firebaseUser.uid);
                 if (ownedAgency) {
                   console.log('🏢✅ Encontrada agência própria:', ownedAgency.id);
                   userType = 'company_owner';
@@ -159,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               console.log('🔍 Tentando verificar agência própria devido a erro de permissão...');
               try {
                 const ownAgencyData = await firestoreService.getAgencyData(firebaseUser.uid);
-                if (ownAgencyData && ownAgencyData.ownerUID === firebaseUser.uid) {
+                if (ownAgencyData && (ownAgencyData as any).ownerUID === firebaseUser.uid) {
                   console.log('🏢✅ Agência própria encontrada por ID direto');
                   userType = 'company_owner';
                   userRole = 'owner';
