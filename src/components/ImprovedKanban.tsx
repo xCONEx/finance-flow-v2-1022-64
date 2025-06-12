@@ -9,55 +9,66 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { 
-  Briefcase, 
+  Video, 
   Clock, 
-  DollarSign, 
+  Calendar,
   User, 
   Plus, 
   Edit, 
   Trash2,
-  MessageCircle,
-  Paperclip,
-  Calendar,
-  Save,
-  Tag
+  Link,
+  Upload,
+  Eye,
+  CheckCircle,
+  AlertTriangle,
+  Play,
+  Scissors,
+  Search,
+  FileVideo,
+  ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { firestoreService } from '../services/firestore';
-import KanbanCard from './KanbanCard';
-import TagManager from './TagManager';
+import { usePermissions } from '../hooks/usePermissions';
+import { useAgency } from '../hooks/useAgency';
 
-// Definições de tipos
-interface KanbanTask {
+// Definições de tipos específicas para projetos audiovisuais
+interface VideoProject {
   id: string;
   title: string;
   description: string;
-  value: string;
+  clientName: string;
   deadline: string;
-  responsible: string;
-  type: string;
-  comments: number;
-  attachments: number;
   priority: 'alta' | 'média' | 'baixa';
+  projectType: 'Casamento' | 'Evento Corporativo' | 'Comercial' | 'Documentário' | 'Social Media' | 'Outro';
+  estimatedDuration: string; // Ex: "5 minutos"
+  deliveryLinks: DeliveryLink[];
   createdAt: string;
-  tags?: string[];
+  assignedTo: string;
+  notes: string;
+  status: 'filmado' | 'edicao' | 'revisao' | 'entregue';
 }
 
-interface Tag {
+interface DeliveryLink {
   id: string;
-  name: string;
-  color: string;
+  url: string;
+  platform: 'WeTransfer' | 'Google Drive' | 'Dropbox' | 'YouTube' | 'Vimeo' | 'Outro';
+  description: string;
+  uploadedAt: string;
+  isPublic: boolean; // Se o cliente pode ver
 }
 
-interface KanbanColumn {
+interface ProjectColumn {
   title: string;
   color: string;
-  items: KanbanTask[];
+  icon: React.ComponentType<any>;
+  description: string;
+  projects: VideoProject[];
 }
 
-interface KanbanBoard {
-  [key: string]: KanbanColumn;
+interface ProjectBoard {
+  [key: string]: ProjectColumn;
 }
 
 interface TeamMember {
@@ -68,54 +79,51 @@ interface TeamMember {
 }
 
 const ImprovedKanban = () => {
-  const [board, setBoard] = useState<KanbanBoard>({});
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDescription, setNewTaskDescription] = useState('');
-  const [newTaskValue, setNewTaskValue] = useState('');
-  const [newTaskDeadline, setNewTaskDeadline] = useState('');
-  const [newTaskResponsible, setNewTaskResponsible] = useState('');
-  const [newTaskType, setNewTaskType] = useState('');
-  const [newTaskPriority, setNewTaskPriority] = useState<'alta' | 'média' | 'baixa'>('média');
-  const [selectedColumn, setSelectedColumn] = useState('todo');
-  const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [isEditingTask, setIsEditingTask] = useState(false);
+  const [board, setBoard] = useState<ProjectBoard>({});
+  const [newProject, setNewProject] = useState<Partial<VideoProject>>({
+    title: '',
+    description: '',
+    clientName: '',
+    deadline: '',
+    priority: 'média',
+    projectType: 'Comercial',
+    estimatedDuration: '',
+    assignedTo: '',
+    notes: '',
+    deliveryLinks: []
+  });
+  const [selectedColumn, setSelectedColumn] = useState('filmado');
+  const [selectedProject, setSelectedProject] = useState<VideoProject | null>(null);
+  const [isEditingProject, setIsEditingProject] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string>('');
-  const { user, agencyData } = useAuth();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newDeliveryLink, setNewDeliveryLink] = useState({
+    url: '',
+    platform: 'WeTransfer' as const,
+    description: '',
+    isPublic: false
+  });
+
+  const { user } = useAuth();
+  const { agencyData, isLoading: agencyLoading } = useAgency();
+  const permissions = usePermissions(agencyData?.userRole || 'viewer');
   const { toast } = useToast();
 
   useEffect(() => {
     if (agencyData && user) {
-      loadUserRole();
-      loadKanbanData();
       loadTeamMembers();
+      loadProjectData();
     } else {
       setIsLoading(false);
     }
   }, [agencyData, user]);
 
-  const loadUserRole = async () => {
-    if (!agencyData || !user) return;
-    
-    try {
-      const role = await firestoreService.getUserRole(agencyData.id, user.id);
-      setUserRole(role || 'viewer');
-      console.log('✅ Role do usuário carregado:', role);
-    } catch (error) {
-      console.error('❌ Erro ao buscar role:', error);
-      setUserRole('viewer');
-    }
-  };
-
   const loadTeamMembers = async () => {
-    if (!agencyData) return;
+    if (!agencyData?.id || agencyData.id === 'admin') return;
     
     try {
-      console.log('👥 Carregando membros da equipe...');
-      
       const members = await firestoreService.getAgenciaMembers(agencyData.id);
       const formattedMembers: TeamMember[] = members.map(member => ({
         uid: member.uid,
@@ -125,115 +133,106 @@ const ImprovedKanban = () => {
       }));
       
       setTeamMembers(formattedMembers);
-      console.log('✅ Membros carregados:', formattedMembers.length);
-      
     } catch (error) {
-      console.error('❌ Erro ao carregar membros da equipe:', error);
-      // Fallback: apenas usuário atual
+      console.error('❌ Erro ao carregar equipe:', error);
       if (user) {
         setTeamMembers([{
           uid: user.id,
           email: user.email,
           name: user.name,
-          role: userRole || 'editor'
+          role: agencyData?.userRole || 'editor'
         }]);
       }
     }
   };
 
-  const loadKanbanData = async () => {
+  const loadProjectData = async () => {
     if (!agencyData) return;
 
     try {
-      console.log('📦 Carregando dados do Kanban para empresa:', agencyData.id);
+      console.log('📦 Carregando projetos para:', agencyData.id);
       
       const existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
       
       if (existingBoard && existingBoard.columns) {
-        console.log('✅ Board existente carregado');
         setBoard(existingBoard.columns);
-        setTags(existingBoard.tags || []);
       } else {
-        console.log('📝 Criando board inicial');
-        const initialBoard: KanbanBoard = {
-          'todo': {
-            title: 'A Fazer',
-            color: 'bg-red-50 border-red-200',
-            items: []
-          },
-          'inProgress': {
-            title: 'Em Produção',
-            color: 'bg-yellow-50 border-yellow-200',
-            items: []
-          },
-          'review': {
-            title: 'Em Revisão',
+        // Criar board inicial com colunas específicas para projetos audiovisuais
+        const initialBoard: ProjectBoard = {
+          'filmado': {
+            title: 'Filmado',
             color: 'bg-blue-50 border-blue-200',
-            items: []
+            icon: Video,
+            description: 'Material gravado, aguardando edição',
+            projects: []
           },
-          'done': {
-            title: 'Finalizado',
+          'edicao': {
+            title: 'Em Edição',
+            color: 'bg-orange-50 border-orange-200',
+            icon: Scissors,
+            description: 'Projeto sendo editado',
+            projects: []
+          },
+          'revisao': {
+            title: 'Revisão',
+            color: 'bg-yellow-50 border-yellow-200',
+            icon: Eye,
+            description: 'Aguardando aprovação do cliente',
+            projects: []
+          },
+          'entregue': {
+            title: 'Entregue',
             color: 'bg-green-50 border-green-200',
-            items: []
+            icon: CheckCircle,
+            description: 'Projeto finalizado e entregue',
+            projects: []
           }
         };
 
-        const initialTags: Tag[] = [
-          { id: 'tag_1', name: 'Urgente', color: '#EF4444' },
-          { id: 'tag_2', name: 'Importante', color: '#F59E0B' },
-          { id: 'tag_3', name: 'Baixa Prioridade', color: '#10B981' }
-        ];
-
         setBoard(initialBoard);
-        setTags(initialTags);
         
-        // Salvar o board inicial apenas se tiver permissão
-        if (canEdit && userRole === 'owner') {
+        if (permissions.canEditProjects) {
           try {
-            await saveKanbanState(initialBoard, initialTags);
+            await saveProjectState(initialBoard);
           } catch (saveError) {
-            console.warn('⚠️ Não foi possível salvar o board inicial:', saveError);
+            console.warn('⚠️ Não foi possível salvar board inicial:', saveError);
           }
         }
       }
     } catch (error) {
-      console.error('❌ Erro ao carregar Kanban:', error);
-      // Criar board local temporário
-      const fallbackBoard: KanbanBoard = {
-        'todo': { title: 'A Fazer', color: 'bg-red-50 border-red-200', items: [] },
-        'inProgress': { title: 'Em Produção', color: 'bg-yellow-50 border-yellow-200', items: [] },
-        'review': { title: 'Em Revisão', color: 'bg-blue-50 border-blue-200', items: [] },
-        'done': { title: 'Finalizado', color: 'bg-green-50 border-green-200', items: [] }
+      console.error('❌ Erro ao carregar projetos:', error);
+      // Board local como fallback
+      const fallbackBoard: ProjectBoard = {
+        'filmado': { title: 'Filmado', color: 'bg-blue-50 border-blue-200', icon: Video, description: 'Material gravado', projects: [] },
+        'edicao': { title: 'Em Edição', color: 'bg-orange-50 border-orange-200', icon: Scissors, description: 'Sendo editado', projects: [] },
+        'revisao': { title: 'Revisão', color: 'bg-yellow-50 border-yellow-200', icon: Eye, description: 'Aguardando aprovação', projects: [] },
+        'entregue': { title: 'Entregue', color: 'bg-green-50 border-green-200', icon: CheckCircle, description: 'Finalizado', projects: [] }
       };
       
       setBoard(fallbackBoard);
-      setTags([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const saveKanbanState = async (boardData: KanbanBoard, tagsData: Tag[] = tags) => {
-    if (!agencyData || !canEdit) {
+  const saveProjectState = async (boardData: ProjectBoard) => {
+    if (!agencyData || !permissions.canEditProjects) {
       console.log('⚠️ Sem permissão para salvar ou agência não encontrada');
       return;
     }
 
     try {
-      console.log('💾 Salvando estado do Kanban...');
-      const kanbanData = {
+      const projectData = {
         columns: boardData,
-        tags: tagsData,
         updatedAt: new Date().toISOString(),
         updatedBy: user?.id
       };
       
-      await firestoreService.saveKanbanBoard(agencyData.id, kanbanData);
-      console.log('✅ Kanban salvo com sucesso');
+      await firestoreService.saveKanbanBoard(agencyData.id, projectData);
+      console.log('✅ Projetos salvos com sucesso');
     } catch (error) {
-      console.error('❌ Erro ao salvar Kanban:', error);
+      console.error('❌ Erro ao salvar projetos:', error);
       
-      // Mostrar toast apropriado baseado no tipo de erro
       if (error.code === 'permission-denied') {
         toast({
           title: "Aviso de Permissão",
@@ -251,227 +250,229 @@ const ImprovedKanban = () => {
   };
 
   const handleDragEnd = async (result: any) => {
-    if (!result.destination) return;
+    if (!result.destination || !permissions.canEditProjects) return;
 
     const { source, destination } = result;
     
     if (source.droppableId !== destination.droppableId) {
-      // Mover entre colunas
       const sourceColumn = board[source.droppableId];
       const destColumn = board[destination.droppableId];
-      const sourceItems = [...sourceColumn.items];
-      const destItems = [...destColumn.items];
-      const [removed] = sourceItems.splice(source.index, 1);
-      destItems.splice(destination.index, 0, removed);
+      const sourceProjects = [...sourceColumn.projects];
+      const destProjects = [...destColumn.projects];
+      const [movedProject] = sourceProjects.splice(source.index, 1);
+      
+      // Atualizar status do projeto
+      movedProject.status = destination.droppableId as VideoProject['status'];
+      
+      destProjects.splice(destination.index, 0, movedProject);
       
       const newBoard = {
         ...board,
         [source.droppableId]: {
           ...sourceColumn,
-          items: sourceItems
+          projects: sourceProjects
         },
         [destination.droppableId]: {
           ...destColumn,
-          items: destItems
+          projects: destProjects
         }
       };
 
       setBoard(newBoard);
-      await saveKanbanState(newBoard);
+      await saveProjectState(newBoard);
       
       toast({
-        title: "Sucesso",
-        description: `Tarefa "${removed.title}" movida para ${destColumn.title}`
+        title: "Projeto Movido",
+        description: `"${movedProject.title}" movido para ${destColumn.title}`
       });
     } else {
       // Reordenar na mesma coluna
       const column = board[source.droppableId];
-      const copiedItems = [...column.items];
-      const [removed] = copiedItems.splice(source.index, 1);
-      copiedItems.splice(destination.index, 0, removed);
+      const copiedProjects = [...column.projects];
+      const [removed] = copiedProjects.splice(source.index, 1);
+      copiedProjects.splice(destination.index, 0, removed);
       
       const newBoard = {
         ...board,
         [source.droppableId]: {
           ...column,
-          items: copiedItems
+          projects: copiedProjects
         }
       };
 
       setBoard(newBoard);
-      await saveKanbanState(newBoard);
+      await saveProjectState(newBoard);
     }
   };
 
-  const handleAddTask = async () => {
-    if (!newTaskTitle || !newTaskDescription) {
+  const handleAddProject = async () => {
+    if (!newProject.title || !newProject.clientName || !permissions.canEditProjects) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
+        description: "Preencha pelo menos o título e nome do cliente",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      const newTask: KanbanTask = {
-        id: `task_${Date.now()}`,
-        title: newTaskTitle,
-        description: newTaskDescription,
-        value: newTaskValue || 'Não informado',
-        deadline: newTaskDeadline || 'Não definido',
-        responsible: newTaskResponsible || user?.name || 'Não atribuído',
-        type: newTaskType || 'Geral',
-        comments: 0,
-        attachments: 0,
-        priority: newTaskPriority,
+      const project: VideoProject = {
+        id: `project_${Date.now()}`,
+        title: newProject.title!,
+        description: newProject.description || '',
+        clientName: newProject.clientName!,
+        deadline: newProject.deadline || '',
+        priority: newProject.priority || 'média',
+        projectType: newProject.projectType || 'Comercial',
+        estimatedDuration: newProject.estimatedDuration || '',
+        assignedTo: newProject.assignedTo || user?.name || 'Não atribuído',
+        notes: newProject.notes || '',
+        deliveryLinks: [],
         createdAt: new Date().toISOString(),
-        tags: selectedTags
+        status: selectedColumn as VideoProject['status']
       };
 
       const updatedBoard = {
         ...board,
         [selectedColumn]: {
           ...board[selectedColumn],
-          items: [...board[selectedColumn].items, newTask]
+          projects: [...board[selectedColumn].projects, project]
         }
       };
 
       setBoard(updatedBoard);
-      await saveKanbanState(updatedBoard);
+      await saveProjectState(updatedBoard);
 
       // Limpar formulário
-      setNewTaskTitle('');
-      setNewTaskDescription('');
-      setNewTaskValue('');
-      setNewTaskDeadline('');
-      setNewTaskResponsible('');
-      setNewTaskType('');
-      setNewTaskPriority('média');
-      setSelectedTags([]);
+      setNewProject({
+        title: '',
+        description: '',
+        clientName: '',
+        deadline: '',
+        priority: 'média',
+        projectType: 'Comercial',
+        estimatedDuration: '',
+        assignedTo: '',
+        notes: '',
+        deliveryLinks: []
+      });
+      setShowAddModal(false);
 
       toast({
-        title: "Sucesso",
-        description: "Tarefa adicionada com sucesso"
+        title: "Projeto Criado",
+        description: `"${project.title}" foi adicionado com sucesso`
       });
     } catch (error) {
-      console.error('❌ Erro ao adicionar tarefa:', error);
+      console.error('❌ Erro ao criar projeto:', error);
       toast({
         title: "Erro",
-        description: "Erro ao adicionar tarefa",
+        description: "Erro ao criar projeto",
         variant: "destructive"
       });
     }
   };
 
-  const handleSaveTaskEdit = async () => {
-    if (!selectedTask) return;
+  const handleAddDeliveryLink = () => {
+    if (!selectedProject || !newDeliveryLink.url) return;
 
-    try {
-      let updatedBoard = { ...board };
+    const link: DeliveryLink = {
+      id: `link_${Date.now()}`,
+      url: newDeliveryLink.url,
+      platform: newDeliveryLink.platform,
+      description: newDeliveryLink.description,
+      uploadedAt: new Date().toISOString(),
+      isPublic: newDeliveryLink.isPublic
+    };
 
-      Object.keys(updatedBoard).forEach(columnId => {
-        const taskIndex = updatedBoard[columnId].items.findIndex(item => item.id === selectedTask.id);
-        if (taskIndex !== -1) {
-          updatedBoard[columnId].items[taskIndex] = selectedTask;
-        }
-      });
+    const updatedProject = {
+      ...selectedProject,
+      deliveryLinks: [...selectedProject.deliveryLinks, link]
+    };
 
-      setBoard(updatedBoard);
-      await saveKanbanState(updatedBoard);
-      setIsEditingTask(false);
+    setSelectedProject(updatedProject);
+    
+    // Atualizar no board
+    const updatedBoard = { ...board };
+    Object.keys(updatedBoard).forEach(columnId => {
+      const projectIndex = updatedBoard[columnId].projects.findIndex(p => p.id === selectedProject.id);
+      if (projectIndex !== -1) {
+        updatedBoard[columnId].projects[projectIndex] = updatedProject;
+      }
+    });
 
-      toast({
-        title: "Sucesso",
-        description: "Tarefa atualizada com sucesso"
-      });
-    } catch (error) {
-      console.error('❌ Erro ao salvar tarefa:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao salvar tarefa",
-        variant: "destructive"
-      });
-    }
-  };
+    setBoard(updatedBoard);
+    saveProjectState(updatedBoard);
 
-  const handleDeleteTask = async (taskId: string) => {
-    try {
-      let updatedBoard = { ...board };
+    // Limpar formulário
+    setNewDeliveryLink({
+      url: '',
+      platform: 'WeTransfer',
+      description: '',
+      isPublic: false
+    });
 
-      Object.keys(updatedBoard).forEach(columnId => {
-        updatedBoard[columnId].items = updatedBoard[columnId].items.filter(item => item.id !== taskId);
-      });
-
-      setBoard(updatedBoard);
-      await saveKanbanState(updatedBoard);
-      setSelectedTask(null);
-
-      toast({
-        title: "Sucesso",
-        description: "Tarefa removida com sucesso"
-      });
-    } catch (error) {
-      console.error('❌ Erro ao deletar tarefa:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao deletar tarefa",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleAddTag = (tag: Tag) => {
-    const updatedTags = [...tags, tag];
-    setTags(updatedTags);
-    saveKanbanState(board, updatedTags);
-  };
-
-  const handleRemoveTag = (tagId: string) => {
-    const updatedTags = tags.filter(tag => tag.id !== tagId);
-    setTags(updatedTags);
-    saveKanbanState(board, updatedTags);
-  };
-
-  const handleTagSelect = (tagId: string) => {
-    if (selectedTags.includes(tagId)) {
-      setSelectedTags(selectedTags.filter(id => id !== tagId));
-    } else {
-      setSelectedTags([...selectedTags, tagId]);
-    }
-  };
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'Filmagem': return 'bg-blue-100 text-blue-800';
-      case 'Edição': return 'bg-purple-100 text-purple-800';
-      case 'Motion Graphics': return 'bg-orange-100 text-orange-800';
-      case 'Geral': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+    toast({
+      title: "Link Adicionado",
+      description: "Link de entrega adicionado com sucesso"
+    });
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'alta': return 'bg-red-100 text-red-800';
-      case 'média': return 'bg-yellow-100 text-yellow-800';
-      case 'baixa': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'alta': return 'bg-red-100 text-red-800 border-red-200';
+      case 'média': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'baixa': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  // Ordem fixa das colunas
-  const fixedColumnOrder = ['todo', 'inProgress', 'review', 'done'];
+  const getProjectTypeColor = (type: string) => {
+    const colors = {
+      'Casamento': 'bg-pink-100 text-pink-800',
+      'Evento Corporativo': 'bg-blue-100 text-blue-800',
+      'Comercial': 'bg-purple-100 text-purple-800',
+      'Documentário': 'bg-indigo-100 text-indigo-800',
+      'Social Media': 'bg-green-100 text-green-800',
+      'Outro': 'bg-gray-100 text-gray-800'
+    };
+    return colors[type as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+  };
 
-  // Verificar se o usuário pode editar - apenas owners e editors podem editar
-  const canEdit = userRole === 'owner' || userRole === 'editor';
+  const isDeadlineNear = (deadline: string) => {
+    if (!deadline) return false;
+    const deadlineDate = new Date(deadline);
+    const today = new Date();
+    const diffTime = deadlineDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays <= 3 && diffDays >= 0; // Próximos 3 dias
+  };
+
+  const isOverdue = (deadline: string) => {
+    if (!deadline) return false;
+    const deadlineDate = new Date(deadline);
+    const today = new Date();
+    return deadlineDate < today;
+  };
+
+  // Ordem fixa das colunas
+  const fixedColumnOrder = ['filmado', 'edicao', 'revisao', 'entregue'];
+
+  // Filtrar projetos por busca
+  const filterProjects = (projects: VideoProject[]) => {
+    if (!searchTerm) return projects;
+    return projects.filter(project =>
+      project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
 
   // Verificar se o usuário faz parte de uma empresa
   if (!agencyData) {
     return (
       <div className="text-center py-16">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
-          <Briefcase className="h-16 w-16 mx-auto text-yellow-600 mb-4" />
+          <Video className="h-16 w-16 mx-auto text-yellow-600 mb-4" />
           <h3 className="text-lg font-semibold text-yellow-800 mb-2">
             Acesso Restrito
           </h3>
@@ -484,12 +485,12 @@ const ImprovedKanban = () => {
     );
   }
 
-  if (isLoading) {
+  if (isLoading || agencyLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando Kanban...</p>
+          <p className="text-gray-600">Carregando projetos...</p>
         </div>
       </div>
     );
@@ -497,149 +498,223 @@ const ImprovedKanban = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="text-center space-y-2">
           <h2 className="text-3xl font-bold flex items-center gap-2">
-            <Briefcase className="text-purple-600" />
-            Kanban de Projetos
+            <FileVideo className="text-purple-600" />
+            Gestão de Projetos Audiovisuais
           </h2>
           <p className="text-gray-600">
-            {agencyData.name} - Gerencie o fluxo dos seus projetos
-            {!canEdit && <span className="text-orange-600 ml-2">(Somente visualização)</span>}
+            {agencyData.name} - Organize seus projetos de filmagem e edição
+            {!permissions.canEditProjects && <span className="text-orange-600 ml-2">(Somente visualização)</span>}
           </p>
         </div>
 
-        {canEdit && (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Nova Tarefa
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Adicionar Nova Tarefa</DialogTitle>
-                <DialogDescription>
-                  Preencha os campos abaixo para criar uma nova tarefa no kanban.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <Input
-                  placeholder="Título da tarefa"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                />
-                
-                <Textarea
-                  placeholder="Descrição detalhada"
-                  value={newTaskDescription}
-                  onChange={(e) => setNewTaskDescription(e.target.value)}
-                />
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Busca */}
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Input
+              placeholder="Buscar projetos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 w-full sm:w-64"
+            />
+          </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    placeholder="Valor (R$)"
-                    value={newTaskValue}
-                    onChange={(e) => setNewTaskValue(e.target.value)}
-                  />
-                  <Input
-                    type="date"
-                    value={newTaskDeadline}
-                    onChange={(e) => setNewTaskDeadline(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Select value={newTaskResponsible} onValueChange={setNewTaskResponsible}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teamMembers.map((member) => (
-                        <SelectItem key={member.uid} value={member.name}>
-                          {member.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  
-                  <Select value={newTaskType} onValueChange={setNewTaskType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Filmagem">Filmagem</SelectItem>
-                      <SelectItem value="Edição">Edição</SelectItem>
-                      <SelectItem value="Motion Graphics">Motion Graphics</SelectItem>
-                      <SelectItem value="Geral">Geral</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Coluna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">A Fazer</SelectItem>
-                      <SelectItem value="inProgress">Em Produção</SelectItem>
-                      <SelectItem value="review">Em Revisão</SelectItem>
-                      <SelectItem value="done">Finalizado</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={newTaskPriority} onValueChange={(value: 'alta' | 'média' | 'baixa') => setNewTaskPriority(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Prioridade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alta">Alta</SelectItem>
-                      <SelectItem value="média">Média</SelectItem>
-                      <SelectItem value="baixa">Baixa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Etiquetas</label>
-                  <TagManager 
-                    tags={tags}
-                    onAddTag={handleAddTag}
-                    onRemoveTag={handleRemoveTag}
-                    selectedTags={selectedTags}
-                    onTagSelect={handleTagSelect}
-                  />
-                </div>
-
-                <Button onClick={handleAddTask} className="w-full">
-                  Adicionar Tarefa
+          {/* Botão de novo projeto */}
+          {permissions.canEditProjects && (
+            <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+              <DialogTrigger asChild>
+                <Button className="bg-purple-600 hover:bg-purple-700">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Projeto
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Criar Novo Projeto</DialogTitle>
+                  <DialogDescription>
+                    Preencha as informações do projeto audiovisual
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium mb-2 block">Título do Projeto *</label>
+                      <Input
+                        placeholder="Ex: Casamento João e Maria"
+                        value={newProject.title || ''}
+                        onChange={(e) => setNewProject({...newProject, title: e.target.value})}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Cliente *</label>
+                      <Input
+                        placeholder="Nome do cliente"
+                        value={newProject.clientName || ''}
+                        onChange={(e) => setNewProject({...newProject, clientName: e.target.value})}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Prazo de Entrega</label>
+                      <Input
+                        type="date"
+                        value={newProject.deadline || ''}
+                        onChange={(e) => setNewProject({...newProject, deadline: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Descrição</label>
+                    <Textarea
+                      placeholder="Detalhes sobre o projeto..."
+                      value={newProject.description || ''}
+                      onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Tipo de Projeto</label>
+                      <Select 
+                        value={newProject.projectType || 'Comercial'} 
+                        onValueChange={(value) => setNewProject({...newProject, projectType: value as VideoProject['projectType']})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Casamento">Casamento</SelectItem>
+                          <SelectItem value="Evento Corporativo">Evento Corporativo</SelectItem>
+                          <SelectItem value="Comercial">Comercial</SelectItem>
+                          <SelectItem value="Documentário">Documentário</SelectItem>
+                          <SelectItem value="Social Media">Social Media</SelectItem>
+                          <SelectItem value="Outro">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Prioridade</label>
+                      <Select 
+                        value={newProject.priority || 'média'} 
+                        onValueChange={(value: 'alta' | 'média' | 'baixa') => setNewProject({...newProject, priority: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="alta">Alta</SelectItem>
+                          <SelectItem value="média">Média</SelectItem>
+                          <SelectItem value="baixa">Baixa</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Duração Estimada</label>
+                      <Input
+                        placeholder="Ex: 5 minutos"
+                        value={newProject.estimatedDuration || ''}
+                        onChange={(e) => setNewProject({...newProject, estimatedDuration: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Responsável</label>
+                      <Select
+                        value={newProject.assignedTo || ''}
+                        onValueChange={(value) => setNewProject({...newProject, assignedTo: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecionar editor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teamMembers.map((member) => (
+                            <SelectItem key={member.uid} value={member.name}>
+                              {member.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Status Inicial</label>
+                      <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="filmado">Filmado</SelectItem>
+                          <SelectItem value="edicao">Em Edição</SelectItem>
+                          <SelectItem value="revisao">Revisão</SelectItem>
+                          <SelectItem value="entregue">Entregue</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Observações</label>
+                    <Textarea
+                      placeholder="Notas adicionais..."
+                      value={newProject.notes || ''}
+                      onChange={(e) => setNewProject({...newProject, notes: e.target.value})}
+                      rows={2}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button onClick={handleAddProject} className="flex-1">
+                    Criar Projeto
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddModal(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
-      <DragDropContext onDragEnd={canEdit ? handleDragEnd : () => {}}>
+      {/* Kanban Board */}
+      <DragDropContext onDragEnd={permissions.canEditProjects ? handleDragEnd : () => {}}>
         <div className="grid lg:grid-cols-4 gap-6">
           {fixedColumnOrder.map((columnId) => {
             const column = board[columnId];
             if (!column) return null;
             
+            const filteredProjects = filterProjects(column.projects);
+            const IconComponent = column.icon;
+            
             return (
               <Card key={columnId} className={`${column.color} h-fit`}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-center font-semibold">
+                  <CardTitle className="text-center font-semibold flex items-center justify-center gap-2">
+                    <IconComponent className="h-5 w-5" />
                     {column.title}
                     <Badge variant="secondary" className="ml-2">
-                      {column.items?.length || 0}
+                      {filteredProjects.length}
                     </Badge>
                   </CardTitle>
+                  <p className="text-xs text-center text-gray-600">{column.description}</p>
                 </CardHeader>
                 <CardContent>
-                  <Droppable droppableId={columnId} isDropDisabled={!canEdit}>
+                  <Droppable droppableId={columnId} isDropDisabled={!permissions.canEditProjects}>
                     {(provided, snapshot) => (
                       <div
                         {...provided.droppableProps}
@@ -648,12 +723,12 @@ const ImprovedKanban = () => {
                           snapshot.isDraggingOver ? 'bg-white/50' : ''
                         }`}
                       >
-                        {(column.items || []).map((item, index) => (
+                        {filteredProjects.map((project, index) => (
                           <Draggable 
-                            key={item.id} 
-                            draggableId={item.id} 
+                            key={project.id} 
+                            draggableId={project.id} 
                             index={index}
-                            isDragDisabled={!canEdit}
+                            isDragDisabled={!permissions.canEditProjects}
                           >
                             {(provided, snapshot) => (
                               <div
@@ -661,12 +736,76 @@ const ImprovedKanban = () => {
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
                               >
-                                <KanbanCard
-                                  task={item}
-                                  tags={tags}
-                                  onClick={() => setSelectedTask(item)}
-                                  isDragging={snapshot.isDragging}
-                                />
+                                <Card 
+                                  className={`cursor-pointer hover:shadow-md transition-all duration-200 ${
+                                    snapshot.isDragging ? 'rotate-2 shadow-lg' : ''
+                                  }`}
+                                  onClick={() => setSelectedProject(project)}
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="space-y-3">
+                                      {/* Header do projeto */}
+                                      <div className="flex justify-between items-start">
+                                        <h4 className="font-semibold text-sm line-clamp-2">{project.title}</h4>
+                                        <div className="flex gap-1 flex-shrink-0 ml-2">
+                                          {isOverdue(project.deadline) && (
+                                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                                          )}
+                                          {isDeadlineNear(project.deadline) && !isOverdue(project.deadline) && (
+                                            <Clock className="h-4 w-4 text-orange-600" />
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Cliente */}
+                                      <div className="flex items-center gap-2">
+                                        <User className="h-3 w-3 text-gray-500" />
+                                        <span className="text-xs text-gray-600">{project.clientName}</span>
+                                      </div>
+
+                                      {/* Badges */}
+                                      <div className="flex gap-1 flex-wrap">
+                                        <Badge className={`text-xs ${getPriorityColor(project.priority)}`}>
+                                          {project.priority}
+                                        </Badge>
+                                        <Badge className={`text-xs ${getProjectTypeColor(project.projectType)}`}>
+                                          {project.projectType}
+                                        </Badge>
+                                      </div>
+
+                                      {/* Data limite */}
+                                      {project.deadline && (
+                                        <div className="flex items-center gap-2">
+                                          <Calendar className="h-3 w-3 text-gray-500" />
+                                          <span className={`text-xs ${
+                                            isOverdue(project.deadline) ? 'text-red-600 font-medium' :
+                                            isDeadlineNear(project.deadline) ? 'text-orange-600 font-medium' : 
+                                            'text-gray-600'
+                                          }`}>
+                                            {new Date(project.deadline).toLocaleDateString('pt-BR')}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {/* Links de entrega */}
+                                      {project.deliveryLinks.length > 0 && (
+                                        <div className="flex items-center gap-2">
+                                          <Link className="h-3 w-3 text-green-600" />
+                                          <span className="text-xs text-green-600">
+                                            {project.deliveryLinks.length} link(s)
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {/* Responsável */}
+                                      {project.assignedTo && (
+                                        <div className="text-xs text-gray-500 border-t pt-2">
+                                          Editor: {project.assignedTo}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </CardContent>
+                                </Card>
                               </div>
                             )}
                           </Draggable>
@@ -682,164 +821,178 @@ const ImprovedKanban = () => {
         </div>
       </DragDropContext>
 
-      {/* Modal de visualização/edição de tarefa */}
-      <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
-        <DialogContent className="max-w-md">
+      {/* Modal de detalhes do projeto */}
+      <Dialog open={!!selectedProject} onOpenChange={() => setSelectedProject(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
-              Detalhes da Tarefa
-              {canEdit && (
+              <span className="flex items-center gap-2">
+                <Video className="h-5 w-5" />
+                {selectedProject?.title}
+              </span>
+              {permissions.canEditProjects && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setIsEditingTask(!isEditingTask)}
+                    onClick={() => setIsEditingProject(!isEditingProject)}
                   >
                     <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDeleteTask(selectedTask?.id || '')}
-                  >
-                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               )}
             </DialogTitle>
-            <DialogDescription>
-              {isEditingTask && canEdit ? 
-                "Edite os campos abaixo para atualizar a tarefa." : 
-                "Visualize ou edite os detalhes desta tarefa."
-              }
-            </DialogDescription>
           </DialogHeader>
           
-          {selectedTask && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Título</label>
-                {isEditingTask && canEdit ? (
-                  <Input
-                    value={selectedTask.title}
-                    onChange={(e) => setSelectedTask({...selectedTask, title: e.target.value})}
-                  />
-                ) : (
-                  <p className="text-sm text-gray-600">{selectedTask.title}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Descrição</label>
-                {isEditingTask && canEdit ? (
-                  <Textarea
-                    value={selectedTask.description}
-                    onChange={(e) => setSelectedTask({...selectedTask, description: e.target.value})}
-                  />
-                ) : (
-                  <p className="text-sm text-gray-600">{selectedTask.description}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+          {selectedProject && (
+            <div className="space-y-6">
+              {/* Informações básicas */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium">Valor</label>
-                  {isEditingTask && canEdit ? (
-                    <Input
-                      value={selectedTask.value}
-                      onChange={(e) => setSelectedTask({...selectedTask, value: e.target.value})}
-                    />
-                  ) : (
-                    <p className="text-sm text-gray-600">{selectedTask.value}</p>
-                  )}
+                  <label className="text-sm font-medium text-gray-700">Cliente</label>
+                  <p className="text-sm text-gray-900">{selectedProject.clientName}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Prazo</label>
-                  {isEditingTask && canEdit ? (
-                    <Input
-                      type="date"
-                      value={selectedTask.deadline}
-                      onChange={(e) => setSelectedTask({...selectedTask, deadline: e.target.value})}
-                    />
-                  ) : (
-                    <p className="text-sm text-gray-600">{selectedTask.deadline}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Responsável</label>
-                {isEditingTask && canEdit ? (
-                  <Select
-                    value={selectedTask.responsible}
-                    onValueChange={(value) => setSelectedTask({...selectedTask, responsible: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teamMembers.map((member) => (
-                        <SelectItem key={member.uid} value={member.name}>
-                          {member.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm text-gray-600">{selectedTask.responsible}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Prioridade</label>
-                {isEditingTask && canEdit ? (
-                  <Select
-                    value={selectedTask.priority}
-                    onValueChange={(value: 'alta' | 'média' | 'baixa') => setSelectedTask({...selectedTask, priority: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alta">Alta</SelectItem>
-                      <SelectItem value="média">Média</SelectItem>
-                      <SelectItem value="baixa">Baixa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Badge className={getPriorityColor(selectedTask.priority)} variant="secondary">
-                    {selectedTask.priority}
+                  <label className="text-sm font-medium text-gray-700">Tipo de Projeto</label>
+                  <Badge className={`${getProjectTypeColor(selectedProject.projectType)} ml-2`}>
+                    {selectedProject.projectType}
                   </Badge>
-                )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Prioridade</label>
+                  <Badge className={`${getPriorityColor(selectedProject.priority)} ml-2`}>
+                    {selectedProject.priority}
+                  </Badge>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Prazo</label>
+                  <p className={`text-sm ${
+                    selectedProject.deadline && isOverdue(selectedProject.deadline) ? 'text-red-600 font-medium' :
+                    selectedProject.deadline && isDeadlineNear(selectedProject.deadline) ? 'text-orange-600 font-medium' : 
+                    'text-gray-900'
+                  }`}>
+                    {selectedProject.deadline ? new Date(selectedProject.deadline).toLocaleDateString('pt-BR') : 'Não definido'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Duração Estimada</label>
+                  <p className="text-sm text-gray-900">{selectedProject.estimatedDuration || 'Não informado'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Responsável</label>
+                  <p className="text-sm text-gray-900">{selectedProject.assignedTo}</p>
+                </div>
               </div>
 
-              {selectedTask.tags && selectedTask.tags.length > 0 && (
+              {/* Descrição */}
+              {selectedProject.description && (
                 <div>
-                  <label className="text-sm font-medium">Etiquetas</label>
-                  <div className="flex gap-1 flex-wrap mt-1">
-                    {selectedTask.tags.map(tagId => {
-                      const tag = tags.find(t => t.id === tagId);
-                      if (!tag) return null;
-                      return (
-                        <Badge
-                          key={tag.id}
-                          style={{ backgroundColor: tag.color, color: 'white' }}
-                          className="text-xs"
-                        >
-                          {tag.name}
-                        </Badge>
-                      );
-                    })}
-                  </div>
+                  <label className="text-sm font-medium text-gray-700">Descrição</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedProject.description}</p>
                 </div>
               )}
 
-              {isEditingTask && canEdit && (
-                <Button onClick={handleSaveTaskEdit} className="w-full">
-                  <Save className="h-4 w-4 mr-2" />
-                  Salvar Alterações
-                </Button>
+              {/* Observações */}
+              {selectedProject.notes && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Observações</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedProject.notes}</p>
+                </div>
               )}
+
+              {/* Links de entrega */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700">Links de Entrega</label>
+                  {permissions.canUploadFiles && (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button size="sm" variant="outline">
+                          <Upload className="h-4 w-4 mr-2" />
+                          Adicionar Link
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Adicionar Link de Entrega</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <Input
+                            placeholder="URL do arquivo (WeTransfer, Google Drive, etc.)"
+                            value={newDeliveryLink.url}
+                            onChange={(e) => setNewDeliveryLink({...newDeliveryLink, url: e.target.value})}
+                          />
+                          <div className="grid grid-cols-2 gap-4">
+                            <Select
+                              value={newDeliveryLink.platform}
+                              onValueChange={(value) => setNewDeliveryLink({...newDeliveryLink, platform: value as any})}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="WeTransfer">WeTransfer</SelectItem>
+                                <SelectItem value="Google Drive">Google Drive</SelectItem>
+                                <SelectItem value="Dropbox">Dropbox</SelectItem>
+                                <SelectItem value="YouTube">YouTube</SelectItem>
+                                <SelectItem value="Vimeo">Vimeo</SelectItem>
+                                <SelectItem value="Outro">Outro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id="isPublic"
+                                checked={newDeliveryLink.isPublic}
+                                onChange={(e) => setNewDeliveryLink({...newDeliveryLink, isPublic: e.target.checked})}
+                              />
+                              <label htmlFor="isPublic" className="text-sm">Visível para o cliente</label>
+                            </div>
+                          </div>
+                          <Input
+                            placeholder="Descrição (opcional)"
+                            value={newDeliveryLink.description}
+                            onChange={(e) => setNewDeliveryLink({...newDeliveryLink, description: e.target.value})}
+                          />
+                          <Button onClick={handleAddDeliveryLink} className="w-full">
+                            Adicionar Link
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {selectedProject.deliveryLinks.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">Nenhum link de entrega adicionado</p>
+                  ) : (
+                    selectedProject.deliveryLinks.map((link) => (
+                      <div key={link.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{link.platform}</Badge>
+                            {link.isPublic && (
+                              <Badge variant="secondary" className="bg-green-100 text-green-800">Cliente</Badge>
+                            )}
+                          </div>
+                          {link.description && (
+                            <p className="text-sm text-gray-600 mt-1">{link.description}</p>
+                          )}
+                          <p className="text-xs text-gray-500">
+                            Adicionado em {new Date(link.uploadedAt).toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={link.url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
