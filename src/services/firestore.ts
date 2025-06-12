@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -389,27 +390,33 @@ export const firestoreService = {
             });
           }
         }
+
+        console.log('✅ Membros encontrados:', membros.length);
+        return membros;
       } catch (error) {
-        console.warn('⚠️ Erro ao buscar colaboradores, usando fallback');
+        console.warn('⚠️ Erro ao buscar colaboradores na subcoleção, usando fallback:', error);
         
         // Fallback: pelo menos retornar o owner
         const agencyData = await this.getAgencyData(agenciaId);
         if (agencyData?.ownerUID) {
-          const ownerData = await this.getUserData(agencyData.ownerUID);
-          if (ownerData) {
-            membros.push({
-              uid: agencyData.ownerUID,
-              role: 'owner',
-              addedAt: new Date(),
-              email: ownerData.email,
-              name: ownerData.name || ownerData.email?.split('@')[0] || 'Owner'
-            });
+          try {
+            const ownerData = await this.getUserData(agencyData.ownerUID);
+            if (ownerData) {
+              membros.push({
+                uid: agencyData.ownerUID,
+                role: 'owner',
+                addedAt: new Date(),
+                email: ownerData.email,
+                name: ownerData.name || ownerData.email?.split('@')[0] || 'Owner'
+              });
+            }
+          } catch (error) {
+            console.warn('⚠️ Erro ao buscar dados do owner');
           }
         }
+        
+        return membros;
       }
-      
-      console.log('✅ Membros encontrados:', membros.length);
-      return membros;
     } catch (error) {
       console.error('❌ Erro ao buscar membros:', error);
       return [];
@@ -418,6 +425,13 @@ export const firestoreService = {
 
   async getUserRole(agenciaId: string, userId: string) {
     try {
+      // Verificar se é owner
+      const agencyData = await this.getAgencyData(agenciaId);
+      if (agencyData?.ownerUID === userId) {
+        return 'owner';
+      }
+
+      // Verificar na subcoleção colaboradores
       const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', userId);
       const collaboratorDoc = await getDoc(collaboratorRef);
       
@@ -453,12 +467,17 @@ export const firestoreService = {
   async saveKanbanBoard(agencyId: string, boardData: any) {
     try {
       console.log('💾 Salvando board do Kanban para agência:', agencyId);
-      const agencyRef = doc(db, 'agencias', agencyId);
       
-      await updateDoc(agencyRef, {
-        kanbanBoard: boardData,
+      // Usar coleção separada kanbanBoards conforme as regras
+      const boardRef = doc(db, 'kanbanBoards', agencyId);
+      
+      const kanbanData = {
+        ...boardData,
+        agencyId: agencyId,
         updatedAt: serverTimestamp()
-      });
+      };
+      
+      await setDoc(boardRef, kanbanData, { merge: true });
       
       console.log('✅ Board do Kanban salvo com sucesso');
     } catch (error) {
@@ -470,16 +489,18 @@ export const firestoreService = {
   async getKanbanBoard(agencyId: string) {
     try {
       console.log('📦 Buscando board do Kanban para agência:', agencyId);
-      const agencyRef = doc(db, 'agencias', agencyId);
-      const agencyDoc = await getDoc(agencyRef);
       
-      if (agencyDoc.exists()) {
-        const data = agencyDoc.data();
+      // Buscar na coleção separada kanbanBoards
+      const boardRef = doc(db, 'kanbanBoards', agencyId);
+      const boardDoc = await getDoc(boardRef);
+      
+      if (boardDoc.exists()) {
+        const data = boardDoc.data();
         console.log('✅ Board do Kanban encontrado');
-        return data.kanbanBoard || null;
+        return data;
       }
       
-      console.log('❌ Agência não encontrada');
+      console.log('❌ Board do Kanban não encontrado');
       return null;
     } catch (error) {
       console.error('❌ Erro ao buscar board do Kanban:', error);

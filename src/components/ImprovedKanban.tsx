@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -101,15 +100,9 @@ const ImprovedKanban = () => {
     if (!agencyData || !user) return;
     
     try {
-      // Verificar se é owner
-      if (agencyData.ownerUID === user.id) {
-        setUserRole('owner');
-        return;
-      }
-      
-      // Buscar role como colaborador
       const role = await firestoreService.getUserRole(agencyData.id, user.id);
       setUserRole(role || 'viewer');
+      console.log('✅ Role do usuário carregado:', role);
     } catch (error) {
       console.error('❌ Erro ao buscar role:', error);
       setUserRole('viewer');
@@ -122,65 +115,26 @@ const ImprovedKanban = () => {
     try {
       console.log('👥 Carregando membros da equipe...');
       
-      // Primeiro tentar o método padrão
-      try {
-        const members = await firestoreService.getAgenciaMembers(agencyData.id);
-        const formattedMembers: TeamMember[] = members.map(member => ({
-          uid: member.uid,
-          email: member.email || 'Email não disponível',
-          name: member.name || member.email?.split('@')[0] || 'Nome não disponível',
-          role: member.role
-        }));
-        
-        setTeamMembers(formattedMembers);
-        console.log('✅ Membros carregados:', formattedMembers.length);
-        return;
-      } catch (memberError) {
-        console.warn('⚠️ Erro ao carregar membros, usando fallback:', memberError);
-      }
+      const members = await firestoreService.getAgenciaMembers(agencyData.id);
+      const formattedMembers: TeamMember[] = members.map(member => ({
+        uid: member.uid,
+        email: member.email || 'Email não disponível',
+        name: member.name || member.email?.split('@')[0] || 'Nome não disponível',
+        role: member.role
+      }));
       
-      // Fallback: adicionar pelo menos o usuário atual e owner
-      const fallbackMembers: TeamMember[] = [];
-      
-      // Adicionar owner se disponível
-      if (agencyData.ownerUID) {
-        try {
-          const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
-          if (ownerData) {
-            fallbackMembers.push({
-              uid: agencyData.ownerUID,
-              email: ownerData.email,
-              name: ownerData.name || ownerData.email.split('@')[0],
-              role: 'owner'
-            });
-          }
-        } catch (error) {
-          console.warn('⚠️ Erro ao buscar dados do owner');
-        }
-      }
-      
-      // Adicionar usuário atual se não for o owner
-      if (user && user.id !== agencyData.ownerUID) {
-        fallbackMembers.push({
-          uid: user.id,
-          email: user.email,
-          name: user.name,
-          role: userRole || 'editor'
-        });
-      }
-      
-      setTeamMembers(fallbackMembers);
-      console.log('✅ Membros carregados (fallback):', fallbackMembers.length);
+      setTeamMembers(formattedMembers);
+      console.log('✅ Membros carregados:', formattedMembers.length);
       
     } catch (error) {
       console.error('❌ Erro ao carregar membros da equipe:', error);
-      // Último fallback: apenas usuário atual
+      // Fallback: apenas usuário atual
       if (user) {
         setTeamMembers([{
           uid: user.id,
           email: user.email,
           name: user.name,
-          role: 'editor'
+          role: userRole || 'editor'
         }]);
       }
     }
@@ -192,18 +146,7 @@ const ImprovedKanban = () => {
     try {
       console.log('📦 Carregando dados do Kanban para empresa:', agencyData.id);
       
-      let existingBoard = null;
-      
-      // Tentar carregar board existente
-      try {
-        existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
-      } catch (loadError) {
-        console.warn('⚠️ Erro ao carregar board, usando dados locais se disponíveis:', loadError);
-        // Se há dados no agencyData, usar eles
-        if (agencyData.kanbanBoard) {
-          existingBoard = agencyData.kanbanBoard;
-        }
-      }
+      const existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
       
       if (existingBoard && existingBoard.columns) {
         console.log('✅ Board existente carregado');
@@ -243,8 +186,8 @@ const ImprovedKanban = () => {
         setBoard(initialBoard);
         setTags(initialTags);
         
-        // Tentar salvar o board inicial (apenas se for owner ou admin)
-        if (userRole === 'owner' || user?.userType === 'admin') {
+        // Salvar o board inicial (qualquer colaborador pode criar)
+        if (canEdit) {
           try {
             await saveKanbanState(initialBoard, initialTags);
           } catch (saveError) {
@@ -516,8 +459,8 @@ const ImprovedKanban = () => {
   // Ordem fixa das colunas
   const fixedColumnOrder = ['todo', 'inProgress', 'review', 'done'];
 
-  // Verificar se o usuário pode editar (owner, admin ou editor)
-  const canEdit = userRole === 'owner' || user?.userType === 'admin' || userRole === 'editor';
+  // Verificar se o usuário pode editar (todos os colaboradores podem editar o kanban)
+  const canEdit = userRole === 'owner' || userRole === 'editor' || userRole === 'viewer';
 
   // Verificar se o usuário faz parte de uma empresa
   if (!agencyData) {
