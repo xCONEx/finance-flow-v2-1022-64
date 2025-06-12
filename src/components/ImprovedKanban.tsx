@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -123,7 +124,7 @@ const ImprovedKanban = () => {
       
       // Primeiro tentar o método padrão
       try {
-        const members = await firestoreService.getCompanyMembers(agencyData.id);
+        const members = await firestoreService.getAgenciaMembers(agencyData.id);
         const formattedMembers: TeamMember[] = members.map(member => ({
           uid: member.uid,
           email: member.email || 'Email não disponível',

@@ -33,17 +33,17 @@ import { formatCurrency } from '../utils/formatters';
 
 const AdminPanel = () => {
   const [users, setUsers] = useState([]);
-  const [companies, setCompanies] = useState([]);
+  const [agencias, setAgencias] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [newCompanyName, setNewCompanyName] = useState('');
-  const [newCompanyOwnerEmail, setNewCompanyOwnerEmail] = useState('');
+  const [newAgenciaName, setNewAgenciaName] = useState('');
+  const [newAgenciaOwnerEmail, setNewAgenciaOwnerEmail] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [editingCompany, setEditingCompany] = useState(null);
-  const [showCompanyMembers, setShowCompanyMembers] = useState({});
+  const [editingAgencia, setEditingAgencia] = useState(null);
+  const [showAgenciaMembers, setShowAgenciaMembers] = useState({});
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('viewer');
-  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
+  const [selectedAgenciaId, setSelectedAgenciaId] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -56,19 +56,19 @@ const AdminPanel = () => {
       console.log('Carregando dados do painel admin...');
       
       // Carregar todos os dados em paralelo
-      const [usersData, companiesData, analyticsData] = await Promise.all([
+      const [usersData, agenciasData, analyticsData] = await Promise.all([
         firestoreService.getAllUsers(),
-        firestoreService.getAllCompanies(),
+        firestoreService.getAllAgencias(),
         firestoreService.getAnalyticsData()
       ]);
       
       setUsers(usersData);
-      setCompanies(companiesData);
+      setAgencias(agenciasData);
       setAnalytics(analyticsData);
       
       console.log('Dados carregados:', { 
         users: usersData.length, 
-        companies: companiesData.length,
+        agencias: agenciasData.length,
         analytics: !!analyticsData 
       });
     } catch (error) {
@@ -152,8 +152,8 @@ const AdminPanel = () => {
     }
   };
 
-  const handleCreateCompany = async () => {
-    if (!newCompanyName || !newCompanyOwnerEmail) {
+  const handleCreateAgencia = async () => {
+    if (!newAgenciaName || !newAgenciaOwnerEmail) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos",
@@ -163,9 +163,9 @@ const AdminPanel = () => {
     }
 
     try {
-      console.log('Criando empresa:', newCompanyName, newCompanyOwnerEmail);
+      console.log('Criando agência:', newAgenciaName, newAgenciaOwnerEmail);
       
-      const owner = users.find(user => user.email === newCompanyOwnerEmail);
+      const owner = users.find(user => user.email === newAgenciaOwnerEmail);
       if (!owner) {
         toast({
           title: "Erro",
@@ -175,81 +175,81 @@ const AdminPanel = () => {
         return;
       }
 
-      const companyData = {
-        name: newCompanyName,
+      const agenciaData = {
+        name: newAgenciaName,
         ownerUID: owner.id
       };
       
-      const companyId = await firestoreService.createCompany(companyData);
+      const agenciaId = await firestoreService.createAgencia(agenciaData);
       
       await firestoreService.updateUserField(owner.id, 'userType', 'company_owner');
-      await firestoreService.updateUserField(owner.id, 'companyId', companyId);
+      await firestoreService.updateUserField(owner.id, 'agencyId', agenciaId);
       
-      setNewCompanyName('');
-      setNewCompanyOwnerEmail('');
+      setNewAgenciaName('');
+      setNewAgenciaOwnerEmail('');
       await loadData();
       
       toast({
         title: "Sucesso",
-        description: "Empresa criada com sucesso"
+        description: "Agência criada com sucesso"
       });
     } catch (error) {
-      console.error('Erro ao criar empresa:', error);
+      console.error('Erro ao criar agência:', error);
       toast({
         title: "Erro",
-        description: "Erro ao criar empresa",
+        description: "Erro ao criar agência",
         variant: "destructive"
       });
     }
   };
 
-  const handleEditCompany = async (companyId, newData) => {
+  const handleEditAgencia = async (agenciaId, newData) => {
     try {
-      console.log('Editando empresa:', companyId, newData);
-      await firestoreService.updateCompanyField(companyId, 'name', newData.name);
+      console.log('Editando agência:', agenciaId, newData);
+      await firestoreService.updateAgenciaField(agenciaId, 'name', newData.name);
       
-      setCompanies(companies.map(company => 
-        company.id === companyId ? { ...company, ...newData } : company
+      setAgencias(agencias.map(agencia => 
+        agencia.id === agenciaId ? { ...agencia, ...newData } : agencia
       ));
       
-      setEditingCompany(null);
+      setEditingAgencia(null);
       
       toast({
         title: "Sucesso",
-        description: "Empresa atualizada com sucesso"
+        description: "Agência atualizada com sucesso"
       });
     } catch (error) {
-      console.error('Erro ao editar empresa:', error);
+      console.error('Erro ao editar agência:', error);
       toast({
         title: "Erro",
-        description: "Erro ao editar empresa",
+        description: "Erro ao editar agência",
         variant: "destructive"
       });
     }
   };
 
-  const handleDeleteCompany = async (companyId) => {
+  const handleDeleteAgencia = async (agenciaId) => {
     try {
-      console.log('Deletando empresa:', companyId);
-      await firestoreService.deleteCompany(companyId);
+      console.log('Deletando agência:', agenciaId);
+      await firestoreService.deleteAgencia(agenciaId);
       
-      setCompanies(companies.filter(company => company.id !== companyId));
+      setAgencias(agencias.filter(agencia => agencia.id !== agenciaId));
       
       toast({
         title: "Sucesso",
-        description: "Empresa excluída com sucesso"
+        description: "Agência excluída com sucesso"
       });
     } catch (error) {
-      console.error('Erro ao deletar empresa:', error);
+      console.error('Erro ao deletar agência:', error);
       toast({
         title: "Erro",
-        description: "Erro ao deletar empresa",
+        description: "Erro ao deletar agência",
         variant: "destructive"
       });
     }
   };
 
-  const handleAddMember = async (companyId) => {
+  const handleAddMember = async (agenciaId) => {
     if (!newMemberEmail || !newMemberRole) {
       toast({
         title: "Erro",
@@ -270,13 +270,13 @@ const AdminPanel = () => {
         return;
       }
 
-      await firestoreService.addCompanyMember(companyId, member.id, newMemberRole);
+      await firestoreService.addAgenciaMember(agenciaId, member.id, newMemberRole);
       await firestoreService.updateUserField(member.id, 'userType', 'employee');
-      await firestoreService.updateUserField(member.id, 'companyId', companyId);
+      await firestoreService.updateUserField(member.id, 'agencyId', agenciaId);
       
       setNewMemberEmail('');
       setNewMemberRole('viewer');
-      setSelectedCompanyId(null);
+      setSelectedAgenciaId(null);
       await loadData();
       
       toast({
@@ -293,11 +293,11 @@ const AdminPanel = () => {
     }
   };
 
-  const handleRemoveMember = async (companyId, memberId) => {
+  const handleRemoveMember = async (agenciaId, memberId) => {
     try {
-      await firestoreService.removeCompanyMember(companyId, memberId);
+      await firestoreService.removeAgenciaMember(agenciaId, memberId);
       await firestoreService.updateUserField(memberId, 'userType', 'individual');
-      await firestoreService.updateUserField(memberId, 'companyId', null);
+      await firestoreService.updateUserField(memberId, 'agencyId', null);
       
       await loadData();
       
@@ -357,10 +357,10 @@ const AdminPanel = () => {
     }
   };
 
-  const toggleCompanyMembers = (companyId) => {
-    setShowCompanyMembers(prev => ({
+  const toggleAgenciaMembers = (agenciaId) => {
+    setShowAgenciaMembers(prev => ({
       ...prev,
-      [companyId]: !prev[companyId]
+      [agenciaId]: !prev[agenciaId]
     }));
   };
 
@@ -403,8 +403,8 @@ const AdminPanel = () => {
         <Card>
           <CardContent className="p-4 text-center">
             <Building2 className="h-8 w-8 mx-auto text-green-600 mb-2" />
-            <p className="text-2xl font-bold">{analytics?.overview?.totalCompanies || 0}</p>
-            <p className="text-sm text-gray-600">Empresas</p>
+            <p className="text-2xl font-bold">{analytics?.overview?.totalAgencias || 0}</p>
+            <p className="text-sm text-gray-600">Agências</p>
           </CardContent>
         </Card>
         
@@ -455,7 +455,7 @@ const AdminPanel = () => {
       <Tabs defaultValue="users" className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="users">Usuários</TabsTrigger>
-          <TabsTrigger value="companies">Empresas</TabsTrigger>
+          <TabsTrigger value="agencias">Agências</TabsTrigger>
           <TabsTrigger value="admins">Administradores</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
@@ -521,29 +521,29 @@ const AdminPanel = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="companies" className="space-y-4">
+        <TabsContent value="agencias" className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Gestão de Empresas</CardTitle>
+              <CardTitle>Gestão de Agências</CardTitle>
               <Dialog>
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
-                    Nova Empresa
+                    Nova Agência
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Criar Nova Empresa</DialogTitle>
+                    <DialogTitle>Criar Nova Agência</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
-                      <Label htmlFor="companyName">Nome da Empresa</Label>
+                      <Label htmlFor="agenciaName">Nome da Agência</Label>
                       <Input
-                        id="companyName"
-                        value={newCompanyName}
-                        onChange={(e) => setNewCompanyName(e.target.value)}
-                        placeholder="Digite o nome da empresa"
+                        id="agenciaName"
+                        value={newAgenciaName}
+                        onChange={(e) => setNewAgenciaName(e.target.value)}
+                        placeholder="Digite o nome da agência"
                       />
                     </div>
                     <div>
@@ -551,13 +551,13 @@ const AdminPanel = () => {
                       <Input
                         id="ownerEmail"
                         type="email"
-                        value={newCompanyOwnerEmail}
-                        onChange={(e) => setNewCompanyOwnerEmail(e.target.value)}
+                        value={newAgenciaOwnerEmail}
+                        onChange={(e) => setNewAgenciaOwnerEmail(e.target.value)}
                         placeholder="Digite o email do proprietário"
                       />
                     </div>
-                    <Button onClick={handleCreateCompany} className="w-full">
-                      Criar Empresa
+                    <Button onClick={handleCreateAgencia} className="w-full">
+                      Criar Agência
                     </Button>
                   </div>
                 </DialogContent>
@@ -565,16 +565,16 @@ const AdminPanel = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {companies.map((company) => (
-                  <div key={company.id} className="p-4 border rounded-lg">
+                {agencias.map((agencia) => (
+                  <div key={agencia.id} className="p-4 border rounded-lg">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <h4 className="font-medium text-lg">{company.name}</h4>
-                        <p className="text-sm text-gray-600">Owner UID: {company.ownerUID || company.id}</p>
+                        <h4 className="font-medium text-lg">{agencia.name}</h4>
+                        <p className="text-sm text-gray-600">Owner UID: {agencia.ownerUID || agencia.id}</p>
                         <div className="flex gap-2 mt-2">
-                          <Badge variant="outline">{company.plan || 'premium'}</Badge>
+                          <Badge variant="outline">{agencia.plan || 'premium'}</Badge>
                           <Badge variant="secondary">
-                            {Object.keys(company.colaboradores || {}).length} membros
+                            {Object.keys(agencia.colaboradores || {}).length} membros
                           </Badge>
                         </div>
                       </div>
@@ -587,30 +587,30 @@ const AdminPanel = () => {
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Editar Empresa</DialogTitle>
+                              <DialogTitle>Editar Agência</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4">
                               <div>
-                                <Label>Nome da Empresa</Label>
+                                <Label>Nome da Agência</Label>
                                 <Input
-                                  defaultValue={company.name}
-                                  onChange={(e) => setEditingCompany({ ...company, name: e.target.value })}
+                                  defaultValue={agencia.name}
+                                  onChange={(e) => setEditingAgencia({ ...agencia, name: e.target.value })}
                                 />
                               </div>
                               <div className="flex gap-2">
                                 <Button 
-                                  onClick={() => handleEditCompany(company.id, editingCompany)}
+                                  onClick={() => handleEditAgencia(agencia.id, editingAgencia)}
                                   className="flex-1"
                                 >
                                   Salvar Alterações
                                 </Button>
                                 <Button 
                                   variant="destructive"
-                                  onClick={() => handleDeleteCompany(company.id)}
+                                  onClick={() => handleDeleteAgencia(agencia.id)}
                                   className="flex-1"
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
-                                  Excluir Empresa
+                                  Excluir Agência
                                 </Button>
                               </div>
                             </div>
@@ -649,7 +649,7 @@ const AdminPanel = () => {
                                 </Select>
                               </div>
                               <Button 
-                                onClick={() => handleAddMember(company.id)} 
+                                onClick={() => handleAddMember(agencia.id)} 
                                 className="w-full"
                               >
                                 Adicionar Colaborador
@@ -661,18 +661,18 @@ const AdminPanel = () => {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => toggleCompanyMembers(company.id)}
+                          onClick={() => toggleAgenciaMembers(agencia.id)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
                     
-                    {showCompanyMembers[company.id] && (
+                    {showAgenciaMembers[agencia.id] && (
                       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                         <h5 className="font-medium mb-2">Membros da Equipe:</h5>
-                        {company.colaboradores && Object.keys(company.colaboradores).length > 0 ? (
-                          Object.entries(company.colaboradores).map(([uid, role]) => {
+                        {agencia.colaboradores && Object.keys(agencia.colaboradores).length > 0 ? (
+                          Object.entries(agencia.colaboradores).map(([uid, role]) => {
                             const member = users.find(u => u.id === uid);
                             return (
                               <div key={uid} className="flex justify-between items-center py-2">
@@ -686,7 +686,7 @@ const AdminPanel = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleRemoveMember(company.id, uid)}
+                                    onClick={() => handleRemoveMember(agencia.id, uid)}
                                   >
                                     <UserX className="h-4 w-4" />
                                   </Button>
@@ -778,7 +778,7 @@ const AdminPanel = () => {
                     <p className="text-2xl font-bold text-purple-600">
                       {analytics.productivity.taskCompletionRate.toFixed(1)}%
                     </p>
-                    <p className="text-sm text-gray-500">Tarefas concluídas</p>
+                    <p className="text-sm text-gray-600">Tarefas concluídas</p>
                   </CardContent>
                 </Card>
               </div>
