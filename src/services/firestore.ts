@@ -37,6 +37,14 @@ export interface FirestoreUser {
   companyId?: string;
 }
 
+export interface Collaborator {
+  uid: string;
+  role: 'owner' | 'editor' | 'viewer';
+  addedAt: any;
+  email?: string;
+  name?: string;
+}
+
 export const firestoreService = {
   async createUser(user: FirestoreUser) {
     try {
@@ -49,25 +57,32 @@ export const firestoreService = {
       throw error;
     }
   },
-async getUserByEmail(email: string) {
-  try {
-    console.log('🔍 Buscando usuário por e-mail:', email);
-    const usersRef = collection(db, 'usuarios');
-    const q = query(usersRef, where('email', '==', email), limit(1));
-    const snapshot = await getDocs(q);
 
-    if (!snapshot.empty) {
-      const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
-    } else {
-      console.warn('⚠️ Nenhum usuário encontrado com o email:', email);
-      return null;
+  async getUserByEmail(email: string): Promise<{ id: string; email: string; name?: string } | null> {
+    try {
+      console.log('🔍 Buscando usuário por e-mail:', email);
+      const usersRef = collection(db, 'usuarios');
+      const q = query(usersRef, where('email', '==', email), limit(1));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const docData = snapshot.docs[0];
+        const userData = docData.data();
+        return { 
+          id: docData.id, 
+          email: userData.email,
+          name: userData.name 
+        };
+      } else {
+        console.warn('⚠️ Nenhum usuário encontrado com o email:', email);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Erro ao buscar usuário por e-mail:', error);
+      throw error;
     }
-  } catch (error) {
-    console.error('❌ Erro ao buscar usuário por e-mail:', error);
-    throw error;
-  }
-},
+  },
+
   async updateUserField(uid: string, field: string, value: any) {
     try {
       console.log(`Atualizando campo ${field} do usuário ${uid}`);
@@ -114,79 +129,84 @@ async getUserByEmail(email: string) {
     }
   },
 
-async getUserAgency(uid: string) {
-  try {
-    console.log('🏢 Verificando agência do usuário:', uid);
+  async getUserAgency(uid: string) {
+    try {
+      console.log('🏢 Verificando agência do usuário:', uid);
 
-    // 1) Verificar se o usuário é dono (documento agencia com id = uid)
-    const userAgencyRef = doc(db, 'agencias', uid);
-    const userAgencyDoc = await getDoc(userAgencyRef);
+      // 1) Verificar se o usuário é dono (documento agencia com ownerUID = uid)
+      const agenciasRef = collection(db, 'agencias');
+      const ownerQuery = query(agenciasRef, where('ownerUID', '==', uid));
+      const ownerSnapshot = await getDocs(ownerQuery);
 
-    if (userAgencyDoc.exists()) {
-      const agencyData = userAgencyDoc.data();
-      console.log('✅ Usuário é proprietário da agência:', uid);
-      return { id: userAgencyDoc.id, ...agencyData };
-    }
-
-    // 2) Buscar nas subcoleções colaboradores para o uid
-    const agenciasRef = collection(db, 'agencias');
-    const agenciasSnapshot = await getDocs(agenciasRef);
-
-    for (const agencyDoc of agenciasSnapshot.docs) {
-      // Para cada agência, buscar na subcoleção colaboradores o documento uid
-      const colaboradorRef = doc(db, 'agencias', agencyDoc.id, 'colaboradores', uid);
-      const colaboradorDoc = await getDoc(colaboradorRef);
-
-      if (colaboradorDoc.exists()) {
-        const colaboradorData = colaboradorDoc.data();
-        console.log('✅ Usuário é colaborador da agência:', agencyDoc.id, 'Role:', colaboradorData.role);
-        return { id: agencyDoc.id, ...agencyDoc.data() };
+      if (!ownerSnapshot.empty) {
+        const agencyDoc = ownerSnapshot.docs[0];
+        const agencyData = agencyDoc.data();
+        console.log('✅ Usuário é proprietário da agência:', agencyDoc.id);
+        return { id: agencyDoc.id, ...agencyData };
       }
-    }
 
-    console.log('❌ Usuário não pertence a nenhuma agência');
-    return null;
-  } catch (error) {
-    console.error('❌ Erro ao verificar agência:', error);
-    throw error;
-  }
-},
+      // 2) Buscar nas subcoleções colaboradores
+      const allAgenciesSnapshot = await getDocs(agenciasRef);
+
+      for (const agencyDoc of allAgenciesSnapshot.docs) {
+        const colaboradorRef = doc(db, 'agencias', agencyDoc.id, 'colaboradores', uid);
+        const colaboradorDoc = await getDoc(colaboradorRef);
+
+        if (colaboradorDoc.exists()) {
+          console.log('✅ Usuário é colaborador da agência:', agencyDoc.id);
+          return { id: agencyDoc.id, ...agencyDoc.data() };
+        }
+      }
+
+      console.log('❌ Usuário não pertence a nenhuma agência');
+      return null;
+    } catch (error) {
+      console.error('❌ Erro ao verificar agência:', error);
+      throw error;
+    }
+  },
 
   async createCompany(companyData: any) {
     try {
       console.log('🏢 Criando nova empresa para UID:', companyData.ownerUID);
       
-      // Usar o UID do owner como ID do documento da agência
-      const agencyRef = doc(db, 'agencias', companyData.ownerUID);
+      const agencyRef = doc(collection(db, 'agencias'));
+      const agencyId = agencyRef.id;
       
       const newCompany = {
         name: companyData.name,
         ownerUID: companyData.ownerUID,
-        colaboradores: {
-          [companyData.ownerUID]: 'owner' // Automaticamente dar role de owner
-        },
         equipments: [],
         expenses: [],
         jobs: [],
         kanbanBoard: null,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        status: 'active'
       };
       
       await setDoc(agencyRef, newCompany);
-      console.log('✅ Empresa criada com ID:', companyData.ownerUID);
-      return companyData.ownerUID;
+
+      // Adicionar o owner como colaborador na subcoleção
+      const ownerCollaboratorRef = doc(db, 'agencias', agencyId, 'colaboradores', companyData.ownerUID);
+      await setDoc(ownerCollaboratorRef, {
+        role: 'owner',
+        addedAt: serverTimestamp()
+      });
+      
+      console.log('✅ Empresa criada com ID:', agencyId);
+      return agencyId;
     } catch (error) {
       console.error('❌ Erro ao criar empresa:', error);
       throw error;
     }
   },
 
-async getCompanyInvites(companyId: string): Promise<any[]> {
-  const invitesRef = collection(db, 'invites');
-  const q = query(invitesRef, where('companyId', '==', companyId));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-},
+  async getCompanyInvites(companyId: string): Promise<any[]> {
+    const invitesRef = collection(db, 'invites');
+    const q = query(invitesRef, where('companyId', '==', companyId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  },
 
   async updateCompanyField(companyId: string, field: string, value: any) {
     try {
@@ -215,59 +235,99 @@ async getCompanyInvites(companyId: string): Promise<any[]> {
     }
   },
 
-async addCompanyMember(companyId: string, memberUID: string, role: string) {
-  try {
-    console.log('👥 Adicionando membro à empresa:', { companyId, memberUID, role });
+  async addCompanyMember(companyId: string, memberUID: string, role: string) {
+    try {
+      console.log('👥 Adicionando membro à empresa:', { companyId, memberUID, role });
 
-    const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberUID);
+      const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberUID);
 
-    await setDoc(colaboradorRef, {
-      role,
-      addedAt: serverTimestamp(),
-    });
+      await setDoc(colaboradorRef, {
+        role,
+        addedAt: serverTimestamp(),
+      });
 
-    console.log('✅ Membro adicionado com sucesso');
-  } catch (error) {
-    console.error('❌ Erro ao adicionar membro:', error);
-    throw error;
-  }
-},
+      console.log('✅ Membro adicionado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao adicionar membro:', error);
+      throw error;
+    }
+  },
 
   async removeCompanyMember(companyId: string, memberId: string) {
-  try {
-    console.log('👥 Removendo membro da empresa:', { companyId, memberId });
+    try {
+      console.log('👥 Removendo membro da empresa:', { companyId, memberId });
 
-    const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberId);
+      const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberId);
+      await deleteDoc(colaboradorRef);
 
-    await deleteDoc(colaboradorRef);
+      console.log('✅ Membro removido com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao remover membro:', error);
+      throw error;
+    }
+  },
 
-    console.log('✅ Membro removido com sucesso');
-  } catch (error) {
-    console.error('❌ Erro ao remover membro:', error);
-    throw error;
-  }
-},
+  async updateMemberRole(companyId: string, memberId: string, newRole: string) {
+    try {
+      console.log('👥 Atualizando role do membro:', { companyId, memberId, newRole });
 
-async getCompanyMembers(companyId: string) {
-  const colaboradoresRef = collection(db, 'agencias', companyId, 'colaboradores');
-  const querySnapshot = await getDocs(colaboradoresRef);
-  
-  const membros = [];
-  querySnapshot.forEach(doc => {
-    membros.push({ uid: doc.id, ...doc.data() });
-  });
-  
-  return membros; // Array com objetos { uid, role, addedAt... }
-},
+      const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberId);
+      await updateDoc(colaboradorRef, {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
 
-async getUserRole(companyId: string, userId: string) {
-  const colaboradorDocRef = doc(db, 'agencias', companyId, 'colaboradores', userId);
-  const colaboradorDoc = await getDoc(colaboradorDocRef);
+      console.log('✅ Role do membro atualizada com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar role do membro:', error);
+      throw error;
+    }
+  },
 
-  if (!colaboradorDoc.exists()) return null;
-  return colaboradorDoc.data().role;
-},
+  async getCompanyMembers(companyId: string): Promise<Collaborator[]> {
+    try {
+      console.log('👥 Buscando membros da empresa:', companyId);
+      
+      const colaboradoresRef = collection(db, 'agencias', companyId, 'colaboradores');
+      const querySnapshot = await getDocs(colaboradoresRef);
+      
+      const membros: Collaborator[] = [];
+      
+      for (const doc of querySnapshot.docs) {
+        const collaboratorData = doc.data();
+        
+        // Buscar dados do usuário
+        const userData = await this.getUserData(doc.id);
+        
+        membros.push({
+          uid: doc.id,
+          role: collaboratorData.role,
+          addedAt: collaboratorData.addedAt,
+          email: userData?.email || 'Email não disponível',
+          name: userData?.name || userData?.email?.split('@')[0] || 'Nome não disponível'
+        });
+      }
+      
+      console.log('✅ Membros encontrados:', membros.length);
+      return membros;
+    } catch (error) {
+      console.error('❌ Erro ao buscar membros:', error);
+      throw error;
+    }
+  },
 
+  async getUserRole(companyId: string, userId: string) {
+    try {
+      const colaboradorDocRef = doc(db, 'agencias', companyId, 'colaboradores', userId);
+      const colaboradorDoc = await getDoc(colaboradorDocRef);
+
+      if (!colaboradorDoc.exists()) return null;
+      return colaboradorDoc.data().role;
+    } catch (error) {
+      console.error('❌ Erro ao buscar role do usuário:', error);
+      throw error;
+    }
+  },
 
   async getAllAgencies() {
     try {
