@@ -35,18 +35,18 @@ const InviteAcceptance = () => {
     }
   };
 
-  const handleAcceptInvite = async (inviteId, companyId) => {
+  const handleAcceptInvite = async (inviteId, agenciaId) => {
     try {
-      console.log('Aceitando convite:', inviteId, companyId);
+      console.log('Aceitando convite:', inviteId, agenciaId);
       
       // Aceitar convite no Firebase
-      await firestoreService.acceptInvite(inviteId, user.id, companyId);
+      await firestoreService.acceptInvite(inviteId, user.id, agenciaId);
       
       setPendingInvites(pendingInvites.filter(invite => invite.id !== inviteId));
       
       toast({
         title: "Sucesso!",
-        description: "Você agora faz parte da equipe da empresa!"
+        description: "Você agora faz parte da equipe da agência!"
       });
       
       // Recarregar dados do usuário
@@ -125,7 +125,7 @@ const InviteAcceptance = () => {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Building2 className="h-5 w-5 text-blue-600" />
-              Convite para {invite.companyName}
+              Convite para {invite.agencyName}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -145,7 +145,7 @@ const InviteAcceptance = () => {
               </p>
               {invite.role === 'editor' && (
                 <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded">
-                  Como Editor, você poderá criar e editar projetos, tarefas e acessar o dashboard da empresa.
+                  Como Editor, você poderá criar e editar projetos, tarefas e acessar o dashboard da agência.
                 </p>
               )}
               {invite.role === 'viewer' && (
@@ -157,7 +157,7 @@ const InviteAcceptance = () => {
             
             <div className="flex gap-3">
               <Button 
-                onClick={() => handleAcceptInvite(invite.id, invite.companyId)}
+                onClick={() => handleAcceptInvite(invite.id, invite.agencyId)}
                 className="flex-1"
               >
                 <UserCheck className="h-4 w-4 mr-2" />

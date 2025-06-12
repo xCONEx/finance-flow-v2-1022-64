@@ -41,28 +41,28 @@ const CompanyDashboard = () => {
 
   useEffect(() => {
     if (agencyData) {
-      loadCompanyData();
+      loadAgenciaData();
     } else {
       setIsLoading(false);
     }
   }, [agencyData]);
 
-  const loadCompanyData = async () => {
+  const loadAgenciaData = async () => {
     if (!agencyData) return;
     
     try {
       setIsLoading(true);
-      console.log('🔄 Carregando dados da empresa:', agencyData.id);
+      console.log('🔄 Carregando dados da agência:', agencyData.id);
       
-      const members = await firestoreService.getCompanyMembers(agencyData.id);
+      const members = await firestoreService.getAgenciaMembers(agencyData.id);
       setTeamMembers(members);
       
       console.log('✅ Membros carregados:', members.length);
     } catch (error) {
-      console.error('❌ Erro ao carregar dados da empresa:', error);
+      console.error('❌ Erro ao carregar dados da agência:', error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar dados da empresa",
+        description: "Erro ao carregar dados da agência",
         variant: "destructive"
       });
     } finally {
@@ -108,11 +108,11 @@ const CompanyDashboard = () => {
         return;
       }
 
-      // Adicionar membro à empresa
-      await firestoreService.addCompanyMember(agencyData.id, userBasic.id, inviteRole);
+      // Adicionar membro à agência
+      await firestoreService.addAgenciaMember(agencyData.id, userBasic.id, inviteRole);
       
       // Recarregar dados
-      await loadCompanyData();
+      await loadAgenciaData();
       
       // Limpar formulário
       setInviteEmail('');
@@ -146,8 +146,8 @@ const CompanyDashboard = () => {
     }
 
     try {
-      await firestoreService.removeCompanyMember(agencyData!.id, uid);
-      await loadCompanyData();
+      await firestoreService.removeAgenciaMember(agencyData!.id, uid);
+      await loadAgenciaData();
       
       toast({
         title: "Membro removido",
@@ -175,7 +175,7 @@ const CompanyDashboard = () => {
 
     try {
       await firestoreService.updateMemberRole(agencyData!.id, uid, newRole);
-      await loadCompanyData();
+      await loadAgenciaData();
       setEditingMember(null);
       
       toast({
@@ -241,7 +241,7 @@ const CompanyDashboard = () => {
               Acesso Restrito
             </h3>
             <p className="text-gray-600">
-              Você precisa fazer parte de uma empresa para acessar esta seção.
+              Você precisa fazer parte de uma agência para acessar esta seção.
             </p>
           </CardContent>
         </Card>
@@ -254,7 +254,7 @@ const CompanyDashboard = () => {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando dados da empresa...</p>
+          <p className="text-gray-600">Carregando dados da agência...</p>
         </div>
       </div>
     );
@@ -271,7 +271,7 @@ const CompanyDashboard = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {agencyData?.name || 'Sua Empresa'}
+                {agencyData?.name || 'Sua Agência'}
               </h1>
               <p className="text-gray-600">Gestão de equipe e colaboradores</p>
             </div>
@@ -305,7 +305,7 @@ const CompanyDashboard = () => {
               <Badge className="bg-green-100 text-green-800 border-green-200 mb-2">
                 Ativa
               </Badge>
-              <p className="text-sm text-purple-700 mt-2">Status da Empresa</p>
+              <p className="text-sm text-purple-700 mt-2">Status da Agência</p>
             </CardContent>
           </Card>
         </div>
@@ -337,7 +337,7 @@ const CompanyDashboard = () => {
                         </label>
                         <Input
                           type="email"
-                          placeholder="exemplo@empresa.com"
+                          placeholder="exemplo@agencia.com"
                           value={inviteEmail}
                           onChange={e => setInviteEmail(e.target.value)}
                           disabled={isAddingMember}
