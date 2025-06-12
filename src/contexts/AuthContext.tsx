@@ -8,7 +8,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { auth, forceTokenRefresh } from '../services/firebase';
 import { firestoreService, FirestoreUser } from '../services/firestore';
 import { User } from '../types';
 
@@ -46,6 +46,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           console.log('🔄 Usuário autenticado, carregando dados...', firebaseUser.uid);
           
+          // Forçar refresh do token para garantir que o email esteja incluído
+          await forceTokenRefresh();
+          
           // Verificar se o usuário existe na coleção 'usuarios'
           let userData = await firestoreService.getUserData(firebaseUser.uid);
           
@@ -79,57 +82,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
 
+          // Verificar se é admin PRIMEIRO (antes de buscar agência)
+          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
+          let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
+          let userRole = null;
+          
+          if (isAdmin) {
+            userType = 'admin';
+            console.log('👑 Usuário administrador identificado:', firebaseUser.email);
+          }
+
           // Verificar agência do usuário
           console.log('🏢 Verificando agência do usuário...');
           let userAgency = null;
-          let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
-          let userRole = null;
           
           try {
             userAgency = await firestoreService.getUserAgency(firebaseUser.uid);
             
-            if (userAgency) {
+            if (userAgency && !isAdmin) {
               console.log('🏢 Usuário encontrado em agência:', userAgency.id);
               
-              // Verificar se é owner da agência (ID da agência = UID do usuário)
-              if (userAgency.id === firebaseUser.uid) {
+              // Usar o userRole retornado pelo getUserAgency
+              userRole = userAgency.userRole;
+              
+              // Definir userType baseado no role
+              if (userAgency.userRole === 'owner') {
                 userType = 'company_owner';
-                userRole = 'owner';
                 console.log('👑 Usuário é PROPRIETÁRIO da agência');
-              } else if (userAgency.colaboradores && userAgency.colaboradores[firebaseUser.uid]) {
-                // Verificar role do colaborador
-                userRole = userAgency.colaboradores[firebaseUser.uid];
-                userType = 'employee'; // ✅ Corrigido: definir como employee quando for colaborador
-                console.log('👥 Usuário é colaborador da agência, role:', userRole);
               } else {
-                // Se está na agência mas não é owner nem colaborador registrado, também é employee
                 userType = 'employee';
-                userRole = 'viewer';
-                console.log('👥 Usuário é membro da agência (role padrão: viewer)');
+                console.log('👥 Usuário é colaborador da agência, role:', userRole);
               }
               
               console.log('📦 Dados da agência carregados:', {
                 equipments: userAgency.equipments?.length || 0,
                 expenses: userAgency.expenses?.length || 0,
                 jobs: userAgency.jobs?.length || 0,
-                colaboradores: Object.keys(userAgency.colaboradores || {}).length,
                 kanbanBoard: userAgency.kanbanBoard ? 'presente' : 'ausente'
               });
               setAgencyData(userAgency);
-            } else {
+            } else if (!isAdmin) {
               console.log('👤 Usuário individual (não pertence a agência)');
+              setAgencyData(null);
+            } else {
+              // Admin pode não ter agência própria
               setAgencyData(null);
             }
             
           } catch (error) {
             console.error('❌ Erro ao buscar agência:', error);
-            setAgencyData(null);
-          }
-
-          // Verificar se é admin
-          const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
-          if (isAdmin) {
-            userType = 'admin';
+            if (!isAdmin) {
+              setAgencyData(null);
+            }
           }
           
           // Converter para o formato do contexto
@@ -149,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('👤 Tipo de usuário FINAL:', userType);
           console.log('🎭 Role do usuário:', userRole);
           if (isAdmin) {
-            console.log('👑 Usuário administrador identificado');
+            console.log('👑 Usuário administrador confirmado com acesso total');
           }
 
         } catch (error) {
@@ -171,6 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔐 Iniciando login...');
       await signInWithEmailAndPassword(auth, email, password);
+      // O token será automaticamente atualizado no onAuthStateChanged
     } catch (error) {
       console.error('❌ Erro no login:', error);
       throw error;
@@ -181,7 +186,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔐 Iniciando login com Google...');
       const provider = new GoogleAuthProvider();
+      // Forçar obtenção do email
+      provider.addScope('email');
       await signInWithPopup(auth, provider);
+      // O token será automaticamente atualizado no onAuthStateChanged
     } catch (error) {
       console.error('❌ Erro no login com Google:', error);
       throw error;
