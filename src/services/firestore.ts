@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -146,16 +145,17 @@ export const firestoreService = {
         return { id: agencyDoc.id, ...agencyData };
       }
 
-      // 2) Buscar nas subcoleções colaboradores
-      const allAgenciesSnapshot = await getDocs(agenciasRef);
-
-      for (const agencyDoc of allAgenciesSnapshot.docs) {
-        const colaboradorRef = doc(db, 'agencias', agencyDoc.id, 'colaboradores', uid);
-        const colaboradorDoc = await getDoc(colaboradorRef);
-
-        if (colaboradorDoc.exists()) {
-          console.log('✅ Usuário é colaborador da agência:', agencyDoc.id);
-          return { id: agencyDoc.id, ...agencyDoc.data() };
+      // 2) Verificar no documento do usuário se há agencyId
+      const userData = await this.getUserData(uid);
+      if (userData?.agencyId) {
+        try {
+          const agencyData = await this.getAgencyData(userData.agencyId);
+          if (agencyData) {
+            console.log('✅ Usuário pertence à agência via agencyId:', userData.agencyId);
+            return agencyData;
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro ao buscar agência via agencyId:', error);
         }
       }
 
@@ -182,17 +182,20 @@ export const firestoreService = {
         jobs: [],
         kanbanBoard: null,
         createdAt: serverTimestamp(),
-        status: 'active'
+        status: 'active',
+        members: [
+          {
+            uid: agenciaData.ownerUID,
+            role: 'owner',
+            addedAt: serverTimestamp()
+          }
+        ]
       };
       
       await setDoc(agencyRef, newAgencia);
 
-      // Adicionar o owner como colaborador na subcoleção
-      const ownerCollaboratorRef = doc(db, 'agencias', agencyId, 'colaboradores', agenciaData.ownerUID);
-      await setDoc(ownerCollaboratorRef, {
-        role: 'owner',
-        addedAt: serverTimestamp()
-      });
+      // Atualizar o usuário com o agencyId
+      await this.updateUserField(agenciaData.ownerUID, 'agencyId', agencyId);
       
       console.log('✅ Agência criada com ID:', agencyId);
       return agencyId;
@@ -240,12 +243,35 @@ export const firestoreService = {
     try {
       console.log('👥 Adicionando membro à agência:', { agenciaId, memberUID, role });
 
-      const colaboradorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberUID);
+      // Primeiro, buscar a agência atual
+      const agencyData = await this.getAgencyData(agenciaId);
+      if (!agencyData) {
+        throw new Error('Agência não encontrada');
+      }
 
-      await setDoc(colaboradorRef, {
+      // Adicionar o membro ao array de members
+      const currentMembers = agencyData.members || [];
+      const newMember = {
+        uid: memberUID,
         role,
-        addedAt: serverTimestamp(),
-      });
+        addedAt: serverTimestamp()
+      };
+
+      // Verificar se o membro já existe
+      const existingMemberIndex = currentMembers.findIndex(m => m.uid === memberUID);
+      if (existingMemberIndex >= 0) {
+        // Atualizar role do membro existente
+        currentMembers[existingMemberIndex] = newMember;
+      } else {
+        // Adicionar novo membro
+        currentMembers.push(newMember);
+      }
+
+      // Atualizar o documento da agência
+      await this.updateAgenciaField(agenciaId, 'members', currentMembers);
+
+      // Atualizar o usuário com o agencyId
+      await this.updateUserField(memberUID, 'agencyId', agenciaId);
 
       console.log('✅ Membro adicionado com sucesso');
     } catch (error) {
@@ -258,8 +284,21 @@ export const firestoreService = {
     try {
       console.log('👥 Removendo membro da agência:', { agenciaId, memberId });
 
-      const colaboradorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberId);
-      await deleteDoc(colaboradorRef);
+      // Buscar a agência atual
+      const agencyData = await this.getAgencyData(agenciaId);
+      if (!agencyData) {
+        throw new Error('Agência não encontrada');
+      }
+
+      // Remover o membro do array
+      const currentMembers = agencyData.members || [];
+      const updatedMembers = currentMembers.filter(m => m.uid !== memberId);
+
+      // Atualizar o documento da agência
+      await this.updateAgenciaField(agenciaId, 'members', updatedMembers);
+
+      // Remover agencyId do usuário
+      await this.updateUserField(memberId, 'agencyId', null);
 
       console.log('✅ Membro removido com sucesso');
     } catch (error) {
@@ -272,11 +311,26 @@ export const firestoreService = {
     try {
       console.log('👥 Atualizando role do membro:', { agenciaId, memberId, newRole });
 
-      const colaboradorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberId);
-      await updateDoc(colaboradorRef, {
-        role: newRole,
-        updatedAt: serverTimestamp()
-      });
+      // Buscar a agência atual
+      const agencyData = await this.getAgencyData(agenciaId);
+      if (!agencyData) {
+        throw new Error('Agência não encontrada');
+      }
+
+      // Atualizar o role do membro no array
+      const currentMembers = agencyData.members || [];
+      const memberIndex = currentMembers.findIndex(m => m.uid === memberId);
+      
+      if (memberIndex >= 0) {
+        currentMembers[memberIndex] = {
+          ...currentMembers[memberIndex],
+          role: newRole,
+          updatedAt: serverTimestamp()
+        };
+
+        // Atualizar o documento da agência
+        await this.updateAgenciaField(agenciaId, 'members', currentMembers);
+      }
 
       console.log('✅ Role do membro atualizada com sucesso');
     } catch (error) {
@@ -289,21 +343,23 @@ export const firestoreService = {
     try {
       console.log('👥 Buscando membros da agência:', agenciaId);
       
-      const colaboradoresRef = collection(db, 'agencias', agenciaId, 'colaboradores');
-      const querySnapshot = await getDocs(colaboradoresRef);
-      
+      // Buscar dados da agência
+      const agencyData = await this.getAgencyData(agenciaId);
+      if (!agencyData || !agencyData.members) {
+        console.log('⚠️ Agência sem membros definidos');
+        return [];
+      }
+
       const membros: Collaborator[] = [];
       
-      for (const doc of querySnapshot.docs) {
-        const collaboratorData = doc.data();
-        
+      for (const member of agencyData.members) {
         // Buscar dados do usuário
-        const userData = await this.getUserData(doc.id);
+        const userData = await this.getUserData(member.uid);
         
         membros.push({
-          uid: doc.id,
-          role: collaboratorData.role,
-          addedAt: collaboratorData.addedAt,
+          uid: member.uid,
+          role: member.role,
+          addedAt: member.addedAt,
           email: userData?.email || 'Email não disponível',
           name: userData?.name || userData?.email?.split('@')[0] || 'Nome não disponível'
         });
@@ -319,11 +375,11 @@ export const firestoreService = {
 
   async getUserRole(agenciaId: string, userId: string) {
     try {
-      const colaboradorDocRef = doc(db, 'agencias', agenciaId, 'colaboradores', userId);
-      const colaboradorDoc = await getDoc(colaboradorDocRef);
+      const agencyData = await this.getAgencyData(agenciaId);
+      if (!agencyData || !agencyData.members) return null;
 
-      if (!colaboradorDoc.exists()) return null;
-      return colaboradorDoc.data().role;
+      const member = agencyData.members.find(m => m.uid === userId);
+      return member?.role || null;
     } catch (error) {
       console.error('❌ Erro ao buscar role do usuário:', error);
       throw error;
