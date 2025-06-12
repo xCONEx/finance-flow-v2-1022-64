@@ -49,7 +49,7 @@ export const firestoreService = {
       throw error;
     }
   },
-async getUserByEmail(email: string) {
+async getUserByEmail(email: string): Promise<(FirestoreUser & { id: string }) | null> {
   try {
     console.log('🔍 Buscando usuário por e-mail:', email);
     const usersRef = collection(db, 'usuarios');
@@ -58,7 +58,8 @@ async getUserByEmail(email: string) {
 
     if (!snapshot.empty) {
       const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
+      const userData = doc.data() as FirestoreUser;
+      return { id: doc.id, ...userData };
     } else {
       console.warn('⚠️ Nenhum usuário encontrado com o email:', email);
       return null;
