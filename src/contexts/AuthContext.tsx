@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword,
@@ -67,10 +66,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!userData || !userData.email || userData.email !== userEmail) {
             console.log('👤 Criando/atualizando usuário na coleção usuarios...');
             const newUserData: FirestoreUser = {
+              // Manter dados existentes se houver
+              ...(userData || {}),
+              // Sempre atualizar dados essenciais
               email: userEmail || '',
               uid: firebaseUser.uid,
-              name: firebaseUser.displayName || userEmail?.split('@')[0] || '',
-              logobase64: '',
+              name: firebaseUser.displayName || userData?.name || userEmail?.split('@')[0] || '',
+              logobase64: userData?.logobase64 || '',
               equipments: userData?.equipments || [],
               expenses: userData?.expenses || [],
               jobs: userData?.jobs || [],
@@ -79,12 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 dalilyValue: 0,
                 desiredSalary: 0,
                 workDays: 22
-              },
-              // Manter dados existentes se houver
-              ...(userData || {}),
-              // Garantir que email e uid sejam sempre atualizados
-              email: userEmail || '',
-              uid: firebaseUser.uid,
+              }
             };
             
             await firestoreService.createUser(newUserData);
