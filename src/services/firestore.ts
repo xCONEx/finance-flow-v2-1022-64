@@ -534,13 +534,103 @@ export const firestoreService = {
     }
   },
 
-  async updateUserSubscription(userId: string, plan: string) {
+  async getUserInvites(userEmail: string) {
     try {
-      console.log('💳 Atualizando plano do usuário:', userId, plan);
-      await this.updateUserField(userId, 'subscription', plan);
-      console.log('✅ Plano atualizado com sucesso');
+      console.log('🔍 Buscando convites para:', userEmail);
+      const invitesRef = collection(db, 'invites');
+      const q = query(
+        invitesRef, 
+        where('email', '==', userEmail),
+        where('status', '==', 'pending')
+      );
+      const snapshot = await getDocs(q);
+      
+      const invites = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      console.log('✅ Convites encontrados:', invites.length);
+      return invites;
     } catch (error) {
-      console.error('❌ Erro ao atualizar plano:', error);
+      console.error('❌ Erro ao buscar convites:', error);
+      throw error;
+    }
+  },
+
+  async acceptInvite(inviteId: string, userId: string, companyId: string) {
+    try {
+      console.log('✅ Aceitando convite:', { inviteId, userId, companyId });
+      
+      // Buscar dados do convite
+      const inviteRef = doc(db, 'invites', inviteId);
+      const inviteDoc = await getDoc(inviteRef);
+      
+      if (!inviteDoc.exists()) {
+        throw new Error('Convite não encontrado');
+      }
+      
+      const inviteData = inviteDoc.data();
+      
+      // Adicionar usuário como colaborador na agência
+      await this.addCompanyMember(companyId, userId, inviteData.role);
+      
+      // Atualizar status do convite para aceito
+      await updateDoc(inviteRef, {
+        status: 'accepted',
+        acceptedAt: serverTimestamp(),
+        acceptedBy: userId
+      });
+      
+      console.log('✅ Convite aceito com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao aceitar convite:', error);
+      throw error;
+    }
+  },
+
+  async updateInviteStatus(inviteId: string, status: string) {
+    try {
+      console.log('🔄 Atualizando status do convite:', { inviteId, status });
+      
+      const inviteRef = doc(db, 'invites', inviteId);
+      await updateDoc(inviteRef, {
+        status,
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log('✅ Status do convite atualizado');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar status do convite:', error);
+      throw error;
+    }
+  },
+
+  async createInvite(inviteData: {
+    email: string;
+    companyId: string;
+    companyName: string;
+    role: string;
+    invitedBy: string;
+    invitedByName: string;
+  }) {
+    try {
+      console.log('📧 Criando convite:', inviteData);
+      
+      const inviteRef = doc(collection(db, 'invites'));
+      const newInvite = {
+        ...inviteData,
+        status: 'pending',
+        sentAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+      };
+      
+      await setDoc(inviteRef, newInvite);
+      
+      console.log('✅ Convite criado com ID:', inviteRef.id);
+      return inviteRef.id;
+    } catch (error) {
+      console.error('❌ Erro ao criar convite:', error);
       throw error;
     }
   }
