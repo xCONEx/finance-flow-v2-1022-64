@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -631,6 +632,17 @@ export const firestoreService = {
       return inviteRef.id;
     } catch (error) {
       console.error('❌ Erro ao criar convite:', error);
+      throw error;
+    }
+  },
+
+  async updateUserSubscription(userId: string, plan: string) {
+    try {
+      console.log('💳 Atualizando plano do usuário:', userId, plan);
+      await this.updateUserField(userId, 'subscription', plan);
+      console.log('✅ Plano atualizado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar plano:', error);
       throw error;
     }
   }
