@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -49,12 +48,18 @@ export interface Collaborator {
 export const firestoreService = {
   async createUser(user: FirestoreUser) {
     try {
-      console.log('Criando usuário:', user.uid);
+      console.log('📝 Criando/atualizando usuário:', user.uid, 'com email:', user.email);
       const userRef = doc(db, 'usuarios', user.uid);
-      await setDoc(userRef, user);
-      console.log('Usuário criado com sucesso');
+      
+      // Usar merge: true para não sobrescrever dados existentes desnecessariamente
+      await setDoc(userRef, {
+        ...user,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      console.log('✅ Usuário salvo com sucesso com email:', user.email);
     } catch (error) {
-      console.error('Erro ao criar usuário:', error);
+      console.error('❌ Erro ao criar/atualizar usuário:', error);
       throw error;
     }
   },

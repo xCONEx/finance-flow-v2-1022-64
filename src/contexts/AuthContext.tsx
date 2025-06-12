@@ -45,41 +45,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         try {
           console.log('🔄 Usuário autenticado, carregando dados...', firebaseUser.uid);
+          console.log('📧 Email do Firebase:', firebaseUser.email);
           
           // Forçar refresh do token para garantir que o email esteja incluído
           await forceTokenRefresh();
           
+          // Garantir que o email esteja disponível
+          let userEmail = firebaseUser.email;
+          if (!userEmail) {
+            console.warn('⚠️ Email não disponível no Firebase Auth, tentando recarregar...');
+            await firebaseUser.reload();
+            userEmail = firebaseUser.email || '';
+          }
+
+          console.log('📧 Email final para salvar:', userEmail);
+          
           // Verificar se o usuário existe na coleção 'usuarios'
           let userData = await firestoreService.getUserData(firebaseUser.uid);
           
-          // Se não existir, criar um novo documento
-          if (!userData) {
-            console.log('👤 Criando novo usuário na coleção usuarios...');
+          // Se não existir OU se o email estiver vazio/diferente, criar/atualizar
+          if (!userData || !userData.email || userData.email !== userEmail) {
+            console.log('👤 Criando/atualizando usuário na coleção usuarios...');
             const newUserData: FirestoreUser = {
-              email: firebaseUser.email || '',
+              email: userEmail || '',
               uid: firebaseUser.uid,
+              name: firebaseUser.displayName || userEmail?.split('@')[0] || '',
               logobase64: '',
-              equipments: [],
-              expenses: [],
-              jobs: [],
-              routine: {
+              equipments: userData?.equipments || [],
+              expenses: userData?.expenses || [],
+              jobs: userData?.jobs || [],
+              routine: userData?.routine || {
                 dailyHours: 8,
                 dalilyValue: 0,
                 desiredSalary: 0,
                 workDays: 22
-              }
+              },
+              // Manter dados existentes se houver
+              ...(userData || {}),
+              // Garantir que email e uid sejam sempre atualizados
+              email: userEmail || '',
+              uid: firebaseUser.uid,
             };
             
             await firestoreService.createUser(newUserData);
             userData = newUserData;
-            console.log('✅ Usuário criado com dados padrão');
+            console.log('✅ Usuário criado/atualizado com email:', userEmail);
           } else {
-            console.log('📦 Dados do usuário encontrados:', {
-              equipments: userData.equipments?.length || 0,
-              expenses: userData.expenses?.length || 0,
-              jobs: userData.jobs?.length || 0,
-              routine: userData.routine
-            });
+            console.log('📦 Dados do usuário encontrados com email:', userData.email);
           }
 
           // Verificar se é admin PRIMEIRO (antes de buscar agência)
@@ -183,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const appUser: User = {
             id: firebaseUser.uid,
             email: userData.email,
-            name: firebaseUser.displayName || userData.email.split('@')[0],
+            name: firebaseUser.displayName || userData.name || userData.email.split('@')[0],
             userType: userType,
             createdAt: new Date().toISOString(),
             photoURL: firebaseUser.photoURL || undefined
@@ -195,6 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('✅ Dados do usuário carregados com sucesso!');
           console.log('👤 Tipo de usuário FINAL:', userType);
           console.log('🎭 Role do usuário:', userRole);
+          console.log('📧 Email salvo no contexto:', userData.email);
           if (isAdmin) {
             console.log('👑 Usuário administrador confirmado com acesso total');
           }
@@ -231,6 +244,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const provider = new GoogleAuthProvider();
       // Forçar obtenção do email
       provider.addScope('email');
+      provider.addScope('profile');
       await signInWithPopup(auth, provider);
       // O token será automaticamente atualizado no onAuthStateChanged
     } catch (error) {
@@ -248,6 +262,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newUserData: FirestoreUser = {
         email: email,
         uid: userCredential.user.uid,
+        name: name,
         logobase64: '',
         equipments: [],
         expenses: [],
@@ -261,7 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       await firestoreService.createUser(newUserData);
-      console.log('✅ Conta criada com sucesso!');
+      console.log('✅ Conta criada com sucesso com email:', email);
     } catch (error) {
       console.error('❌ Erro ao criar conta:', error);
       throw error;
