@@ -94,6 +94,11 @@ export const firestoreService = {
       console.log('Campo atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao atualizar campo:', error);
+      // Se for erro de permissão no usuário, continuar sem falhar
+      if (error.code === 'permission-denied') {
+        console.warn('⚠️ Sem permissão para atualizar usuário, mas agência foi atualizada');
+        return;
+      }
       throw error;
     }
   },
@@ -147,7 +152,30 @@ export const firestoreService = {
         console.warn('⚠️ Erro ao verificar agência como owner:', error);
       }
 
-      // 2) Verificar no documento do usuário se há agencyId
+      // 2) Buscar agências onde o usuário é colaborador
+      try {
+        const agenciasRef = collection(db, 'agencias');
+        const snapshot = await getDocs(agenciasRef);
+        
+        for (const agencyDoc of snapshot.docs) {
+          try {
+            const collaboratorRef = doc(db, 'agencias', agencyDoc.id, 'colaboradores', uid);
+            const collaboratorDoc = await getDoc(collaboratorRef);
+            
+            if (collaboratorDoc.exists()) {
+              console.log('✅ Usuário é colaborador da agência:', agencyDoc.id);
+              return { id: agencyDoc.id, ...agencyDoc.data() };
+            }
+          } catch (error) {
+            // Continuar para próxima agência se houver erro de permissão
+            continue;
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Erro ao buscar agências como colaborador:', error);
+      }
+
+      // 3) Verificar no documento do usuário se há agencyId (fallback)
       const userData = await this.getUserData(uid);
       if (userData?.agencyId) {
         try {
@@ -184,16 +212,25 @@ export const firestoreService = {
         jobs: [],
         kanbanBoard: null,
         createdAt: serverTimestamp(),
-        status: 'active',
-        colaboradores: {
-          [agenciaData.ownerUID]: 'owner'
-        }
+        status: 'active'
       };
       
       await setDoc(agencyRef, newAgencia);
 
-      // Atualizar o usuário com o agencyId
-      await this.updateUserField(agenciaData.ownerUID, 'agencyId', agenciaData.ownerUID);
+      // Criar documento do owner na subcoleção colaboradores
+      const ownerCollaboratorRef = doc(db, 'agencias', agenciaData.ownerUID, 'colaboradores', agenciaData.ownerUID);
+      await setDoc(ownerCollaboratorRef, {
+        role: 'owner',
+        addedAt: serverTimestamp(),
+        addedBy: agenciaData.ownerUID
+      });
+
+      // Tentar atualizar o usuário com o agencyId (pode falhar por permissão)
+      try {
+        await this.updateUserField(agenciaData.ownerUID, 'agencyId', agenciaData.ownerUID);
+      } catch (error) {
+        console.warn('⚠️ Não foi possível atualizar agencyId do usuário, mas agência foi criada');
+      }
       
       console.log('✅ Agência criada com ID:', agenciaData.ownerUID);
       return agenciaData.ownerUID;
@@ -246,21 +283,26 @@ export const firestoreService = {
     try {
       console.log('👥 Adicionando membro à agência:', { agenciaId, memberUID, role });
 
-      // Buscar a agência atual
+      // Verificar se a agência existe
       const agencyData = await this.getAgencyData(agenciaId);
       if (!agencyData) {
         throw new Error('Agência não encontrada');
       }
 
-      // Atualizar colaboradores no formato original
-      const currentColaboradores = agencyData.colaboradores || {};
-      currentColaboradores[memberUID] = role;
+      // Criar documento do colaborador na subcoleção
+      const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberUID);
+      await setDoc(collaboratorRef, {
+        role: role,
+        addedAt: serverTimestamp(),
+        addedBy: memberUID // ou o ID de quem está adicionando
+      });
 
-      // Atualizar o documento da agência
-      await this.updateAgenciaField(agenciaId, 'colaboradores', currentColaboradores);
-
-      // Atualizar o usuário com o agencyId
-      await this.updateUserField(memberUID, 'agencyId', agenciaId);
+      // Tentar atualizar o usuário com o agencyId (pode falhar por permissão)
+      try {
+        await this.updateUserField(memberUID, 'agencyId', agenciaId);
+      } catch (error) {
+        console.warn('⚠️ Não foi possível atualizar agencyId do usuário, mas foi adicionado à agência');
+      }
 
       console.log('✅ Membro adicionado com sucesso');
     } catch (error) {
@@ -273,21 +315,16 @@ export const firestoreService = {
     try {
       console.log('👥 Removendo membro da agência:', { agenciaId, memberId });
 
-      // Buscar a agência atual
-      const agencyData = await this.getAgencyData(agenciaId);
-      if (!agencyData) {
-        throw new Error('Agência não encontrada');
+      // Remover documento da subcoleção colaboradores
+      const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberId);
+      await deleteDoc(collaboratorRef);
+
+      // Tentar remover agencyId do usuário (pode falhar por permissão)
+      try {
+        await this.updateUserField(memberId, 'agencyId', null);
+      } catch (error) {
+        console.warn('⚠️ Não foi possível remover agencyId do usuário, mas foi removido da agência');
       }
-
-      // Remover do objeto colaboradores
-      const currentColaboradores = agencyData.colaboradores || {};
-      delete currentColaboradores[memberId];
-
-      // Atualizar o documento da agência
-      await this.updateAgenciaField(agenciaId, 'colaboradores', currentColaboradores);
-
-      // Remover agencyId do usuário
-      await this.updateUserField(memberId, 'agencyId', null);
 
       console.log('✅ Membro removido com sucesso');
     } catch (error) {
@@ -300,18 +337,12 @@ export const firestoreService = {
     try {
       console.log('👥 Atualizando role do membro:', { agenciaId, memberId, newRole });
 
-      // Buscar a agência atual
-      const agencyData = await this.getAgencyData(agenciaId);
-      if (!agencyData) {
-        throw new Error('Agência não encontrada');
-      }
-
-      // Atualizar o role no objeto colaboradores
-      const currentColaboradores = agencyData.colaboradores || {};
-      currentColaboradores[memberId] = newRole;
-
-      // Atualizar o documento da agência
-      await this.updateAgenciaField(agenciaId, 'colaboradores', currentColaboradores);
+      // Atualizar documento na subcoleção colaboradores
+      const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberId);
+      await updateDoc(collaboratorRef, {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
 
       console.log('✅ Role do membro atualizada com sucesso');
     } catch (error) {
@@ -324,55 +355,56 @@ export const firestoreService = {
     try {
       console.log('👥 Buscando membros da agência:', agenciaId);
       
-      // Buscar dados da agência com fallback para erros de permissão
-      let agencyData;
-      try {
-        agencyData = await this.getAgencyData(agenciaId);
-      } catch (error) {
-        console.warn('⚠️ Erro de permissão ao buscar agência, usando fallback');
-        // Fallback: pelo menos retornar o owner
-        const ownerData = await this.getUserData(agenciaId);
-        if (ownerData) {
-          return [{
-            uid: agenciaId,
-            role: 'owner',
-            addedAt: new Date(),
-            email: ownerData.email,
-            name: ownerData.name || ownerData.email?.split('@')[0] || 'Owner'
-          }];
-        }
-        return [];
-      }
-
-      if (!agencyData || !agencyData.colaboradores) {
-        console.log('⚠️ Agência sem colaboradores definidos');
-        return [];
-      }
-
       const membros: Collaborator[] = [];
       
-      for (const [uid, role] of Object.entries(agencyData.colaboradores)) {
-        try {
-          // Buscar dados do usuário
-          const userData = await this.getUserData(uid);
+      try {
+        // Buscar colaboradores na subcoleção
+        const colaboradoresRef = collection(db, 'agencias', agenciaId, 'colaboradores');
+        const snapshot = await getDocs(colaboradoresRef);
+        
+        for (const doc of snapshot.docs) {
+          const collaboratorData = doc.data();
+          const uid = doc.id;
           
-          membros.push({
-            uid: uid,
-            role: role as 'owner' | 'editor' | 'viewer',
-            addedAt: new Date(),
-            email: userData?.email || 'Email não disponível',
-            name: userData?.name || userData?.email?.split('@')[0] || 'Nome não disponível'
-          });
-        } catch (error) {
-          console.warn('⚠️ Erro ao buscar dados do membro:', uid, error);
-          // Adicionar membro com dados limitados
-          membros.push({
-            uid: uid,
-            role: role as 'owner' | 'editor' | 'viewer',
-            addedAt: new Date(),
-            email: 'Email não disponível',
-            name: 'Nome não disponível'
-          });
+          try {
+            // Buscar dados do usuário
+            const userData = await this.getUserData(uid);
+            
+            membros.push({
+              uid: uid,
+              role: collaboratorData.role as 'owner' | 'editor' | 'viewer',
+              addedAt: collaboratorData.addedAt || new Date(),
+              email: userData?.email || 'Email não disponível',
+              name: userData?.name || userData?.email?.split('@')[0] || 'Nome não disponível'
+            });
+          } catch (error) {
+            console.warn('⚠️ Erro ao buscar dados do membro:', uid, error);
+            // Adicionar membro com dados limitados
+            membros.push({
+              uid: uid,
+              role: collaboratorData.role as 'owner' | 'editor' | 'viewer',
+              addedAt: collaboratorData.addedAt || new Date(),
+              email: 'Email não disponível',
+              name: 'Nome não disponível'
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Erro ao buscar colaboradores, usando fallback');
+        
+        // Fallback: pelo menos retornar o owner
+        const agencyData = await this.getAgencyData(agenciaId);
+        if (agencyData?.ownerUID) {
+          const ownerData = await this.getUserData(agencyData.ownerUID);
+          if (ownerData) {
+            membros.push({
+              uid: agencyData.ownerUID,
+              role: 'owner',
+              addedAt: new Date(),
+              email: ownerData.email,
+              name: ownerData.name || ownerData.email?.split('@')[0] || 'Owner'
+            });
+          }
         }
       }
       
@@ -386,10 +418,13 @@ export const firestoreService = {
 
   async getUserRole(agenciaId: string, userId: string) {
     try {
-      const agencyData = await this.getAgencyData(agenciaId);
-      if (!agencyData || !agencyData.colaboradores) return null;
-
-      return agencyData.colaboradores[userId] || null;
+      const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', userId);
+      const collaboratorDoc = await getDoc(collaboratorRef);
+      
+      if (collaboratorDoc.exists()) {
+        return collaboratorDoc.data().role;
+      }
+      return null;
     } catch (error) {
       console.error('❌ Erro ao buscar role do usuário:', error);
       return null;
