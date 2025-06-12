@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Users, 
   Mail, 
@@ -52,11 +50,9 @@ const CompanyDashboard = () => {
     if (!agencyData) return;
     
     try {
-      console.log('🏢 Carregando dados da empresa...', agencyData.id);
       setIsLoading(true);
-      
       const members: TeamMember[] = [];
-      
+
       // Adicionar owner
       if (agencyData.ownerUID) {
         try {
@@ -70,29 +66,28 @@ const CompanyDashboard = () => {
             });
           }
         } catch (error) {
-          console.error('❌ Erro ao carregar dados do owner:', error);
+          console.error('Erro ao carregar dados do owner:', error);
         }
       }
       
-      // Adicionar colaboradores com suas roles
+      // Adicionar colaboradores
       if (agencyData.colaboradores && typeof agencyData.colaboradores === 'object') {
         for (const [uid, role] of Object.entries(agencyData.colaboradores)) {
-          if (uid !== agencyData.ownerUID) { // Evitar duplicar o owner
+          if (uid !== agencyData.ownerUID) {
             try {
               const memberData = await firestoreService.getUserData(uid);
               if (memberData) {
                 members.push({
-                  uid: uid,
+                  uid,
                   email: memberData.email,
                   name: memberData.name || memberData.email.split('@')[0],
                   role: role as string
                 });
               }
             } catch (error) {
-              console.error(`❌ Erro ao carregar dados do colaborador ${uid}:`, error);
-              // Adicionar membro mesmo sem dados completos
+              console.error(`Erro ao carregar dados do colaborador ${uid}:`, error);
               members.push({
-                uid: uid,
+                uid,
                 email: 'Email não disponível',
                 name: 'Nome não disponível',
                 role: role as string
@@ -101,12 +96,9 @@ const CompanyDashboard = () => {
           }
         }
       }
-      
-      console.log('✅ Membros carregados:', members);
       setTeamMembers(members);
-      
     } catch (error) {
-      console.error('❌ Erro ao carregar dados da empresa:', error);
+      console.error('Erro ao carregar dados da empresa:', error);
       toast({
         title: "Erro",
         description: "Erro ao carregar dados da empresa",
@@ -118,7 +110,7 @@ const CompanyDashboard = () => {
   };
 
   const handleAddMemberDirect = async () => {
-    if (!inviteEmail?.trim() || !agencyData) {
+    if (!inviteEmail.trim() || !agencyData) {
       toast({
         title: "Erro",
         description: "Digite um email válido",
@@ -130,51 +122,42 @@ const CompanyDashboard = () => {
     setIsAddingMember(true);
 
     try {
-      console.log('🔍 Procurando usuário com e-mail:', inviteEmail);
-      
-      // Verificar se o usuário já é membro
-      const isAlreadyMember = teamMembers.some(member => member.email.toLowerCase() === inviteEmail.toLowerCase());
+      // Verificar se usuário já é membro
+      const isAlreadyMember = teamMembers.some(m => m.email.toLowerCase() === inviteEmail.toLowerCase());
       if (isAlreadyMember) {
         toast({
           title: "Erro",
           description: "Este usuário já é membro da equipe",
           variant: "destructive"
         });
+        setIsAddingMember(false);
         return;
       }
 
-      const userBasic = await firestoreService.getUserByEmail(inviteEmail);
-
-      if (!userBasic) {
-        toast({
-          title: "Usuário não encontrado",
-          description: "Esse e-mail ainda não está cadastrado na plataforma.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      console.log('👤 Usuário encontrado:', userBasic);
-
-      // Adicionar membro à empresa
-      await firestoreService.addCompanyMember(agencyData.id, userBasic.id, inviteRole);
-
-      // Limpar formulário
-      setInviteEmail('');
-      setInviteRole('viewer');
-      
-      // Recarregar dados
-      await loadCompanyData();
-
-      const displayName = userBasic.name?.trim() || userBasic.email?.split('@')[0] || 'Usuário';
-
+    const userBasic = await firestoreService.getUserByEmail(inviteEmail) as { id: string; name?: string; email?: string };
+    if (!userBasic) {
       toast({
-        title: "Sucesso",
-        description: `${displayName} foi adicionado como ${getRoleLabel(inviteRole)}!`
+        title: "Usuário não encontrado",
+        description: "Esse e-mail ainda não está cadastrado na plataforma.",
+        variant: "destructive"
       });
+      setIsAddingMember(false);
+      return;
+    }
 
+    await firestoreService.addCompanyMember(agencyData.id, userBasic.id, inviteRole);
+    setInviteEmail('');
+    setInviteRole('viewer');
+    await loadCompanyData();
+
+    const displayName = (userBasic && userBasic.name?.trim()) || (userBasic && userBasic.email?.split('@')[0]) || 'Usuário';
+
+    toast({
+      title: "Sucesso",
+      description: `${displayName} foi adicionado como ${getRoleLabel(inviteRole)}!`
+    });
     } catch (error) {
-      console.error('❌ Erro ao adicionar membro:', error);
+      console.error('Erro ao adicionar membro:', error);
       toast({
         title: "Erro",
         description: "Erro ao adicionar membro. Verifique as permissões.",
@@ -185,28 +168,24 @@ const CompanyDashboard = () => {
     }
   };
 
-  const handleRemoveMember = async (memberUid: string, memberName: string) => {
-    if (!agencyData) return;
+const handleRemoveMember = (uid: string) => {
+  if (!canRemoveMembers(currentUserRole, teamMembers.find(m => m.uid === uid)?.role || '')) {
+    alert("Sem permissão para remover esse membro.");
+    return;
+  }
+  setTeamMembers(prev => prev.filter(m => m.uid !== uid));
+};
 
-    try {
-      console.log('🗑️ Removendo membro:', memberUid);
-      
-      await firestoreService.removeCompanyMember(agencyData.id, memberUid);
-      await loadCompanyData(); // Recarregar dados
-      
-      toast({
-        title: "Sucesso",
-        description: `${memberName} foi removido da equipe`
-      });
-    } catch (error) {
-      console.error('❌ Erro ao remover membro:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao remover membro",
-        variant: "destructive"
-      });
-    }
-  };
+const handleEditRole = (uid: string, newRole: string) => {
+  if (currentUserRole !== 'owner') {
+    alert("Sem permissão para editar cargos.");
+    return;
+  }
+  setTeamMembers(prev => prev.map(m => m.uid === uid ? { ...m, role: newRole } : m));
+};
+
+// Removed duplicate handleRemoveMember definition to fix redeclaration error.
+
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -226,24 +205,9 @@ const CompanyDashboard = () => {
     }
   };
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'owner': return 'bg-yellow-100 text-yellow-800';
-      case 'editor': return 'bg-blue-100 text-blue-800';
-      case 'viewer': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const canManageMembers = (userRole: string) => userRole === 'owner';
+  const canRemoveMembers = (userRole: string, targetRole: string) => userRole === 'owner' && targetRole !== 'owner';
 
-  const canManageMembers = (userRole: string) => {
-    return userRole === 'owner';
-  };
-
-  const canRemoveMembers = (userRole: string, targetRole: string) => {
-    return userRole === 'owner' && targetRole !== 'owner';
-  };
-
-  // Determinar role do usuário atual
   const currentUserRole = agencyData?.ownerUID === user?.id ? 'owner' : 
     agencyData?.colaboradores?.[user?.id] || 'viewer';
 
@@ -297,136 +261,117 @@ const CompanyDashboard = () => {
         <Card>
           <CardContent className="p-4 text-center">
             {getRoleIcon(currentUserRole)}
-            <p className="text-sm font-medium mt-2">{getRoleLabel(currentUserRole)}</p>
-            <p className="text-xs text-gray-600">Seu Papel</p>
+            <p className="text-sm font-medium mt-1">Seu Papel</p>
+            <p className="text-lg">{getRoleLabel(currentUserRole)}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4 text-center">
-            <Building2 className="h-8 w-8 mx-auto text-purple-600 mb-2" />
-            <p className="text-sm font-medium mt-2">Empresa Ativa</p>
-            <p className="text-xs text-gray-600">Status</p>
+            <Badge variant={agencyData.status === 'active' ? 'default' : 'destructive'}>
+              {agencyData.status === 'active' ? 'Ativa' : 'Inativa'}
+            </Badge>
+            <p className="mt-1 text-sm text-gray-600">Status da Empresa</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Formulário para adicionar membro */}
+      {canManageMembers(currentUserRole) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-green-600" />
+              Adicionar Membro
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col md:flex-row gap-4">
+            <Input
+              type="email"
+              placeholder="Email do novo membro"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              className="flex-1"
+              disabled={isAddingMember}
+            />
+            <Select
+              value={inviteRole}
+              onValueChange={setInviteRole}
+              disabled={isAddingMember}
+            >
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Selecione o papel" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="viewer">Visualizador</SelectItem>
+                <SelectItem value="editor">Editor</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={handleAddMemberDirect}
+              disabled={isAddingMember}
+              className="whitespace-nowrap"
+            >
+              {isAddingMember ? 'Adicionando...' : 'Adicionar'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Lista de membros */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Membros da Equipe</CardTitle>
-          {canManageMembers(currentUserRole) && (
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Membro
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Adicionar Novo Membro</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Email do colaborador</label>
-                    <Input
-                      placeholder="email@exemplo.com"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      disabled={isAddingMember}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Permissão</label>
-                    <Select value={inviteRole} onValueChange={setInviteRole} disabled={isAddingMember}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecionar permissão" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="editor">
-                          <div className="flex items-center gap-2">
-                            <Edit className="h-4 w-4 text-blue-600" />
-                            Editor - Pode editar projetos e tarefas
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="viewer">
-                          <div className="flex items-center gap-2">
-                            <Eye className="h-4 w-4 text-gray-600" />
-                            Visualizador - Apenas visualizar
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <Button 
-                    onClick={handleAddMemberDirect} 
-                    className="w-full"
-                    disabled={isAddingMember}
-                  >
-                    {isAddingMember ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Adicionando...
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="h-4 w-4 mr-2" />
-                        Adicionar Membro
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-600" />
+            Equipe
+          </CardTitle>
         </CardHeader>
         <CardContent>
+          {teamMembers.length === 0 && (
+            <p className="text-gray-600 text-center py-8">Nenhum membro encontrado.</p>
+          )}
+
           <div className="space-y-4">
-            {teamMembers.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-500">Nenhum membro na equipe</p>
-              </div>
-            ) : (
-              teamMembers.map((member) => (
-                <div key={member.uid} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                        {member.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="font-medium">{member.name}</h4>
-                        <p className="text-sm text-gray-600">{member.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-3 ml-13">
-                      <Badge className={`${getRoleBadgeColor(member.role)} flex items-center gap-1`}>
-                        {getRoleIcon(member.role)}
-                        {getRoleLabel(member.role)}
-                      </Badge>
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        Ativo
-                      </Badge>
-                    </div>
+            {teamMembers.map(member => (
+              <div
+                key={member.uid}
+                className="flex items-center justify-between border rounded-md p-3 hover:shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  {getRoleIcon(member.role)}
+                  <div>
+                    <p className="font-semibold">{member.name}</p>
+                    <p className="text-sm text-gray-500">{member.email}</p>
                   </div>
-                  
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Badge variant="secondary" className="uppercase tracking-wider px-3 py-1">
+                    {getRoleLabel(member.role)}
+                  </Badge>
+<select
+  value={member.role}
+  onChange={e => handleEditRole(member.uid, e.target.value)}
+  disabled={currentUserRole !== 'owner'}
+>
+  <option value="viewer">Viewer</option>
+  <option value="editor">Editor</option>
+  <option value="owner">Owner</option>
+</select>
+
                   {canRemoveMembers(currentUserRole, member.role) && (
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
                       onClick={() => handleRemoveMember(member.uid, member.name)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      title="Remover membro"
                     >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remover
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
-              ))
-            )}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

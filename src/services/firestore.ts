@@ -49,7 +49,7 @@ export const firestoreService = {
       throw error;
     }
   },
-async getUserByEmail(email: string): Promise<(FirestoreUser & { id: string }) | null> {
+async getUserByEmail(email: string) {
   try {
     console.log('🔍 Buscando usuário por e-mail:', email);
     const usersRef = collection(db, 'usuarios');
@@ -58,8 +58,7 @@ async getUserByEmail(email: string): Promise<(FirestoreUser & { id: string }) | 
 
     if (!snapshot.empty) {
       const doc = snapshot.docs[0];
-      const userData = doc.data() as FirestoreUser;
-      return { id: doc.id, ...userData };
+      return { id: doc.id, ...doc.data() };
     } else {
       console.warn('⚠️ Nenhum usuário encontrado com o email:', email);
       return null;
@@ -115,43 +114,43 @@ async getUserByEmail(email: string): Promise<(FirestoreUser & { id: string }) | 
     }
   },
 
-  async getUserAgency(uid: string) {
-    try {
-      console.log('🏢 Verificando agência do usuário:', uid);
-      
-      // Primeira tentativa: verificar se o usuário é dono de uma agência (agência com ID = UID do usuário)
-      const userAgencyRef = doc(db, 'agencias', uid);
-      const userAgencyDoc = await getDoc(userAgencyRef);
-      
-      if (userAgencyDoc.exists()) {
-        const agencyData = userAgencyDoc.data();
-        console.log('✅ Usuário é proprietário da agência:', uid);
-        return { id: userAgencyDoc.id, ...agencyData };
-      }
+async getUserAgency(uid: string) {
+  try {
+    console.log('🏢 Verificando agência do usuário:', uid);
 
-      // Segunda tentativa: buscar em todas as agências onde o usuário é colaborador
-      const agenciasRef = collection(db, 'agencias');
-      const snapshot = await getDocs(agenciasRef);
-      
-      for (const agencyDoc of snapshot.docs) {
-        const agencyData = agencyDoc.data();
-        
-        // Verificar colaboradores (estrutura com roles)
-        if (agencyData.colaboradores && typeof agencyData.colaboradores === 'object') {
-          if (agencyData.colaboradores[uid]) {
-            console.log('✅ Usuário é colaborador da agência:', agencyDoc.id, 'Role:', agencyData.colaboradores[uid]);
-            return { id: agencyDoc.id, ...agencyData };
-          }
-        }
-      }
+    // 1) Verificar se o usuário é dono (documento agencia com id = uid)
+    const userAgencyRef = doc(db, 'agencias', uid);
+    const userAgencyDoc = await getDoc(userAgencyRef);
 
-      console.log('❌ Usuário não pertence a nenhuma agência');
-      return null;
-    } catch (error) {
-      console.error('❌ Erro ao verificar agência:', error);
-      throw error;
+    if (userAgencyDoc.exists()) {
+      const agencyData = userAgencyDoc.data();
+      console.log('✅ Usuário é proprietário da agência:', uid);
+      return { id: userAgencyDoc.id, ...agencyData };
     }
-  },
+
+    // 2) Buscar nas subcoleções colaboradores para o uid
+    const agenciasRef = collection(db, 'agencias');
+    const agenciasSnapshot = await getDocs(agenciasRef);
+
+    for (const agencyDoc of agenciasSnapshot.docs) {
+      // Para cada agência, buscar na subcoleção colaboradores o documento uid
+      const colaboradorRef = doc(db, 'agencias', agencyDoc.id, 'colaboradores', uid);
+      const colaboradorDoc = await getDoc(colaboradorRef);
+
+      if (colaboradorDoc.exists()) {
+        const colaboradorData = colaboradorDoc.data();
+        console.log('✅ Usuário é colaborador da agência:', agencyDoc.id, 'Role:', colaboradorData.role);
+        return { id: agencyDoc.id, ...agencyDoc.data() };
+      }
+    }
+
+    console.log('❌ Usuário não pertence a nenhuma agência');
+    return null;
+  } catch (error) {
+    console.error('❌ Erro ao verificar agência:', error);
+    throw error;
+  }
+},
 
   async createCompany(companyData: any) {
     try {
@@ -216,147 +215,59 @@ async getCompanyInvites(companyId: string): Promise<any[]> {
     }
   },
 
-  async addCompanyMember(companyId: string, memberUID: string, role: string) {
-    try {
-      console.log('👥 Adicionando membro à empresa:', { companyId, memberUID, role });
-      const agencyRef = doc(db, 'agencias', companyId);
-      const agencyDoc = await getDoc(agencyRef);
-      
-      if (agencyDoc.exists()) {
-        const data = agencyDoc.data();
-        const colaboradores = data.colaboradores || {};
-        colaboradores[memberUID] = role;
-        
-        await updateDoc(agencyRef, {
-          colaboradores: colaboradores,
-          updatedAt: serverTimestamp()
-        });
-        
-        console.log('✅ Membro adicionado com sucesso');
-      }
-    } catch (error) {
-      console.error('❌ Erro ao adicionar membro:', error);
-      throw error;
-    }
-  },
+async addCompanyMember(companyId: string, memberUID: string, role: string) {
+  try {
+    console.log('👥 Adicionando membro à empresa:', { companyId, memberUID, role });
+
+    const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberUID);
+
+    await setDoc(colaboradorRef, {
+      role,
+      addedAt: serverTimestamp(),
+    });
+
+    console.log('✅ Membro adicionado com sucesso');
+  } catch (error) {
+    console.error('❌ Erro ao adicionar membro:', error);
+    throw error;
+  }
+},
 
   async removeCompanyMember(companyId: string, memberId: string) {
-    try {
-      console.log('👥 Removendo membro da empresa:', { companyId, memberId });
-      const agencyRef = doc(db, 'agencias', companyId);
-      const agencyDoc = await getDoc(agencyRef);
-      
-      if (agencyDoc.exists()) {
-        const data = agencyDoc.data();
-        const colaboradores = data.colaboradores || {};
-        
-        // Remover colaborador do objeto
-        delete colaboradores[memberId];
-        
-        await updateDoc(agencyRef, {
-          colaboradores: colaboradores,
-          updatedAt: serverTimestamp()
-        });
-        
-        console.log('✅ Membro removido com sucesso');
-      }
-    } catch (error) {
-      console.error('❌ Erro ao remover membro:', error);
-      throw error;
-    }
-  },
+  try {
+    console.log('👥 Removendo membro da empresa:', { companyId, memberId });
 
+    const colaboradorRef = doc(db, 'agencias', companyId, 'colaboradores', memberId);
+
+    await deleteDoc(colaboradorRef);
+
+    console.log('✅ Membro removido com sucesso');
+  } catch (error) {
+    console.error('❌ Erro ao remover membro:', error);
+    throw error;
+  }
+},
+
+async getCompanyMembers(companyId: string) {
+  const colaboradoresRef = collection(db, 'agencias', companyId, 'colaboradores');
+  const querySnapshot = await getDocs(colaboradoresRef);
   
-  async getUserInvites(userEmail: string) {
-    try {
-      console.log('📨 Buscando convites para:', userEmail);
-      const invitesRef = collection(db, 'invites');
-      const q = query(
-        invitesRef, 
-        where('email', '==', userEmail),
-        where('status', '==', 'pending')
-      );
-      const snapshot = await getDocs(q);
-      
-      const invites = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      console.log('✅ Convites encontrados:', invites.length);
-      return invites;
-    } catch (error) {
-      console.error('❌ Erro ao buscar convites:', error);
-      throw error;
-    }
-  },
+  const membros = [];
+  querySnapshot.forEach(doc => {
+    membros.push({ uid: doc.id, ...doc.data() });
+  });
+  
+  return membros; // Array com objetos { uid, role, addedAt... }
+},
 
-  async sendInvite(inviteData: any) {
-    try {
-      console.log('📧 Enviando convite:', inviteData);
-      const invitesRef = collection(db, 'invites');
-      
-      const newInvite = {
-        ...inviteData,
-        sentAt: serverTimestamp(),
-        createdAt: serverTimestamp()
-      };
-      
-      const docRef = await addDoc(invitesRef, newInvite);
-      console.log('✅ Convite enviado com ID:', docRef.id);
-      return docRef.id;
-    } catch (error) {
-      console.error('❌ Erro ao enviar convite:', error);
-      throw error;
-    }
-  },
+async getUserRole(companyId: string, userId: string) {
+  const colaboradorDocRef = doc(db, 'agencias', companyId, 'colaboradores', userId);
+  const colaboradorDoc = await getDoc(colaboradorDocRef);
 
-  async acceptInvite(inviteId: string, userId: string, companyId: string) {
-    try {
-      console.log('✅ Aceitando convite:', inviteId);
-      
-      // Buscar dados do convite
-      const inviteRef = doc(db, 'invites', inviteId);
-      const inviteDoc = await getDoc(inviteRef);
-      
-      if (!inviteDoc.exists()) {
-        throw new Error('Convite não encontrado');
-      }
-      
-      const inviteData = inviteDoc.data();
-      const role = inviteData.role || 'viewer'; // Default role
-      
-      // Atualizar status do convite
-      await this.updateInviteStatus(inviteId, 'accepted');
-      
-      // Adicionar usuário à empresa com role
-      await this.addCompanyMember(companyId, userId, role);
-      
-      // Atualizar tipo do usuário
-      await this.updateUserField(userId, 'userType', 'employee');
-      await this.updateUserField(userId, 'companyId', companyId);
-      
-      console.log('✅ Convite aceito com sucesso');
-    } catch (error) {
-      console.error('❌ Erro ao aceitar convite:', error);
-      throw error;
-    }
-  },
+  if (!colaboradorDoc.exists()) return null;
+  return colaboradorDoc.data().role;
+},
 
-  async updateInviteStatus(inviteId: string, status: string) {
-    try {
-      console.log('📝 Atualizando status do convite:', inviteId, status);
-      const inviteRef = doc(db, 'invites', inviteId);
-      await updateDoc(inviteRef, {
-        status,
-        updatedAt: serverTimestamp()
-      });
-      console.log('✅ Status do convite atualizado');
-    } catch (error) {
-      console.error('❌ Erro ao atualizar status do convite:', error);
-      throw error;
-    }
-  },
 
   async getAllAgencies() {
     try {
