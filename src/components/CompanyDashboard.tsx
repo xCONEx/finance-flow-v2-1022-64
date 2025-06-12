@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { 
   Users, 
-  Mail, 
   Plus, 
-  UserCheck, 
   Building2,
   Crown,
   Shield,
@@ -20,58 +18,53 @@ import {
   AlertTriangle,
   UserPlus,
   Search,
-  Settings,
-  ChevronRight
+  Settings
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { firestoreService, Collaborator } from '../services/firestore';
+import { useAgency } from '../hooks/useAgency';
+import { usePermissions } from '../hooks/usePermissions';
+import { agencyService } from '../services/agencyService';
+import { firestoreService } from '../services/firestore';
 
 const CompanyDashboard = () => {
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('viewer');
-  const [teamMembers, setTeamMembers] = useState<Collaborator[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const { user, agencyData } = useAuth();
+  
+  const { user } = useAuth();
+  const { agencyData, isLoading, refetch } = useAgency();
+  const permissions = usePermissions(agencyData?.userRole || 'viewer');
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (agencyData) {
-      loadAgenciaData();
-    } else {
-      setIsLoading(false);
+  React.useEffect(() => {
+    if (agencyData?.id && agencyData.id !== 'admin') {
+      loadTeamMembers();
     }
   }, [agencyData]);
 
-  const loadAgenciaData = async () => {
-    if (!agencyData) return;
+  const loadTeamMembers = async () => {
+    if (!agencyData?.id || agencyData.id === 'admin') return;
     
     try {
-      setIsLoading(true);
-      console.log('🔄 Carregando dados da agência:', agencyData.id);
-      
-      const members = await firestoreService.getAgenciaMembers(agencyData.id);
+      const members = await agencyService.getAgencyMembers(agencyData.id);
       setTeamMembers(members);
-      
-      console.log('✅ Membros carregados:', members.length);
     } catch (error) {
-      console.error('❌ Erro ao carregar dados da agência:', error);
+      console.error('❌ Erro ao carregar membros:', error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar dados da agência",
+        description: "Erro ao carregar membros da equipe",
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleAddMember = async () => {
-    if (!inviteEmail.trim() || !agencyData) {
+    if (!inviteEmail.trim() || !agencyData?.id) {
       toast({
         title: "Erro",
         description: "Digite um email válido",
@@ -108,11 +101,11 @@ const CompanyDashboard = () => {
         return;
       }
 
-      // Adicionar membro à agência
-      await firestoreService.addAgenciaMember(agencyData.id, userBasic.id, inviteRole);
+      // Adicionar membro usando novo service
+      await agencyService.addMember(agencyData.id, userBasic.id, inviteEmail, inviteRole);
       
       // Recarregar dados
-      await loadAgenciaData();
+      await loadTeamMembers();
       
       // Limpar formulário
       setInviteEmail('');
@@ -136,18 +129,18 @@ const CompanyDashboard = () => {
   };
 
   const handleRemoveMember = async (uid: string, memberName: string) => {
-    if (!canRemoveMembers(currentUserRole, teamMembers.find(m => m.uid === uid)?.role || '')) {
+    if (!permissions.canManageTeam) {
       toast({
         title: "Sem permissão",
-        description: "Você não tem permissão para remover este membro.",
+        description: "Você não tem permissão para remover membros.",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      await firestoreService.removeAgenciaMember(agencyData!.id, uid);
-      await loadAgenciaData();
+      await agencyService.removeMember(agencyData!.id, uid);
+      await loadTeamMembers();
       
       toast({
         title: "Membro removido",
@@ -163,19 +156,19 @@ const CompanyDashboard = () => {
     }
   };
 
-  const handleEditRole = async (uid: string, newRole: string) => {
-    if (currentUserRole !== 'owner') {
+  const handleEditRole = async (uid: string, newRole: 'editor' | 'viewer') => {
+    if (!permissions.canManageTeam) {
       toast({
         title: "Sem permissão",
-        description: "Apenas o proprietário pode editar cargos.",
+        description: "Você não tem permissão para editar cargos.",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      await firestoreService.updateMemberRole(agencyData!.id, uid, newRole);
-      await loadAgenciaData();
+      await agencyService.updateMemberRole(agencyData!.id, uid, newRole);
+      await loadTeamMembers();
       setEditingMember(null);
       
       toast({
@@ -218,13 +211,6 @@ const CompanyDashboard = () => {
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
-
-  const canManageMembers = (userRole: string) => userRole === 'owner';
-  const canRemoveMembers = (userRole: string, targetRole: string) => 
-    userRole === 'owner' && targetRole !== 'owner';
-
-  const currentUserRole = agencyData?.ownerUID === user?.id ? 'owner' : 
-    teamMembers.find(m => m.uid === user?.id)?.role || 'viewer';
 
   const filteredMembers = teamMembers.filter(member =>
     member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -291,10 +277,10 @@ const CompanyDashboard = () => {
           <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
             <CardContent className="p-6 text-center">
               <div className="flex items-center justify-center mb-2">
-                {getRoleIcon(currentUserRole)}
+                {getRoleIcon(agencyData.userRole)}
               </div>
               <p className="text-lg font-semibold text-green-900">
-                {getRoleLabel(currentUserRole)}
+                {getRoleLabel(agencyData.userRole)}
               </p>
               <p className="text-sm text-green-700">Seu Papel</p>
             </CardContent>
@@ -311,7 +297,7 @@ const CompanyDashboard = () => {
         </div>
 
         {/* Add Member Section */}
-        {canManageMembers(currentUserRole) && (
+        {permissions.canManageTeam && agencyData.id !== 'admin' && (
           <Card>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
@@ -349,7 +335,7 @@ const CompanyDashboard = () => {
                         </label>
                         <Select
                           value={inviteRole}
-                          onValueChange={setInviteRole}
+                          onValueChange={(value: 'editor' | 'viewer') => setInviteRole(value)}
                           disabled={isAddingMember}
                         >
                           <SelectTrigger>
@@ -386,118 +372,120 @@ const CompanyDashboard = () => {
         )}
 
         {/* Team Members */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-blue-600" />
-                Equipe ({filteredMembers.length})
-              </CardTitle>
-              <div className="relative">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <Input
-                  placeholder="Buscar membros..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-9 w-full sm:w-64"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {filteredMembers.length === 0 && !searchTerm && (
-              <div className="text-center py-12">
-                <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-600">Nenhum membro encontrado.</p>
-              </div>
-            )}
-
-            {filteredMembers.length === 0 && searchTerm && (
-              <div className="text-center py-8">
-                <p className="text-gray-600">Nenhum membro encontrado para "{searchTerm}".</p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {filteredMembers.map(member => (
-                <div
-                  key={member.uid}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border rounded-lg p-4 hover:shadow-md transition-all duration-200"
-                >
-                  <div className="flex items-center gap-3 mb-3 sm:mb-0">
-                    <div className="p-2 bg-gray-100 rounded-full">
-                      {getRoleIcon(member.role)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{member.name}</p>
-                      <p className="text-sm text-gray-500">{member.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 justify-between sm:justify-end">
-                    {editingMember === member.uid ? (
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={member.role}
-                          onValueChange={(newRole) => handleEditRole(member.uid, newRole)}
-                          disabled={currentUserRole !== 'owner'}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="viewer">Visualizador</SelectItem>
-                            <SelectItem value="editor">Editor</SelectItem>
-                            {member.role === 'owner' && (
-                              <SelectItem value="owner">Proprietário</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditingMember(null)}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <Badge className={`${getRoleBadgeColor(member.role)} border`}>
-                          {getRoleLabel(member.role)}
-                        </Badge>
-                        
-                        <div className="flex items-center gap-1">
-                          {currentUserRole === 'owner' && member.role !== 'owner' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditingMember(member.uid)}
-                              title="Editar cargo"
-                            >
-                              <Settings className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {canRemoveMembers(currentUserRole, member.role) && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleRemoveMember(member.uid, member.name || '')}
-                              title="Remover membro"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
+        {agencyData.id !== 'admin' && (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-600" />
+                  Equipe ({filteredMembers.length})
+                </CardTitle>
+                <div className="relative">
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Buscar membros..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-9 w-full sm:w-64"
+                  />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredMembers.length === 0 && !searchTerm && (
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                  <p className="text-gray-600">Nenhum membro encontrado.</p>
+                </div>
+              )}
+
+              {filteredMembers.length === 0 && searchTerm && (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">Nenhum membro encontrado para "{searchTerm}".</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {filteredMembers.map(member => (
+                  <div
+                    key={member.uid}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border rounded-lg p-4 hover:shadow-md transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-3 mb-3 sm:mb-0">
+                      <div className="p-2 bg-gray-100 rounded-full">
+                        {getRoleIcon(member.role)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{member.name}</p>
+                        <p className="text-sm text-gray-500">{member.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 justify-between sm:justify-end">
+                      {editingMember === member.uid ? (
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={member.role}
+                            onValueChange={(newRole: 'editor' | 'viewer') => handleEditRole(member.uid, newRole)}
+                            disabled={!permissions.canManageTeam}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="viewer">Visualizador</SelectItem>
+                              <SelectItem value="editor">Editor</SelectItem>
+                              {member.role === 'owner' && (
+                                <SelectItem value="owner">Proprietário</SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingMember(null)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <Badge className={`${getRoleBadgeColor(member.role)} border`}>
+                            {getRoleLabel(member.role)}
+                          </Badge>
+                          
+                          <div className="flex items-center gap-1">
+                            {permissions.canManageTeam && member.role !== 'owner' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingMember(member.uid)}
+                                title="Editar cargo"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            )}
+                            
+                            {permissions.canManageTeam && member.role !== 'owner' && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleRemoveMember(member.uid, member.name || '')}
+                                title="Remover membro"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

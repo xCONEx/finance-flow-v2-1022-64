@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword,
@@ -46,10 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('🔄 Usuário autenticado, carregando dados...', firebaseUser.uid);
           console.log('📧 Email do Firebase:', firebaseUser.email);
           
-          // Forçar refresh do token para garantir que o email esteja incluído
           await forceTokenRefresh();
           
-          // Garantir que o email esteja disponível
           let userEmail = firebaseUser.email;
           if (!userEmail) {
             console.warn('⚠️ Email não disponível no Firebase Auth, tentando recarregar...');
@@ -59,16 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           console.log('📧 Email final para salvar:', userEmail);
           
-          // Verificar se o usuário existe na coleção 'usuarios'
+          // Buscar ou criar usuário
           let userData = await firestoreService.getUserData(firebaseUser.uid);
           
-          // Se não existir OU se o email estiver vazio/diferente, criar/atualizar
           if (!userData || !userData.email || userData.email !== userEmail) {
             console.log('👤 Criando/atualizando usuário na coleção usuarios...');
             const newUserData: FirestoreUser = {
-              // Manter dados existentes se houver
               ...(userData || {}),
-              // Sempre atualizar dados essenciais
               email: userEmail || '',
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || userData?.name || userEmail?.split('@')[0] || '',
@@ -91,101 +87,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('📦 Dados do usuário encontrados com email:', userData.email);
           }
 
-          // Verificar se é admin PRIMEIRO (antes de buscar agência)
+          // Verificar se é admin
           const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
           let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
-          let userRole = null;
           
           if (isAdmin) {
             userType = 'admin';
             console.log('👑 Usuário administrador identificado:', firebaseUser.email);
+            
+            // Atualizar role no banco se necessário
+            if (userData.role !== 'admin') {
+              await firestoreService.updateUserField(firebaseUser.uid, 'role', 'admin');
+              userData.role = 'admin';
+            }
           }
 
-          // Verificar agência do usuário
+          // Buscar dados da agência usando novo método
           console.log('🏢 Verificando agência do usuário...');
           let userAgency = null;
           
           try {
-            userAgency = await firestoreService.getUserAgency(firebaseUser.uid);
+            userAgency = await firestoreService.getUserAgencyData(firebaseUser.uid);
             
-            if (userAgency && !isAdmin) {
-              console.log('🏢 Usuário encontrado em agência:', userAgency.id);
-              
-              // Usar o userRole retornado pelo getUserAgency
-              userRole = userAgency.userRole;
+            if (userAgency) {
+              console.log('🏢 Agência encontrada:', userAgency.id);
+              console.log('👤 Role na agência:', userAgency.userRole);
               
               // Definir userType baseado no role
-              if (userAgency.userRole === 'owner') {
+              if (userAgency.userRole === 'admin') {
+                userType = 'admin';
+              } else if (userAgency.userRole === 'owner') {
                 userType = 'company_owner';
-                console.log('👑 Usuário é PROPRIETÁRIO da agência');
-              } else {
+              } else if (userAgency.userRole === 'editor' || userAgency.userRole === 'viewer') {
                 userType = 'employee';
-                console.log('👥 Usuário é colaborador da agência, role:', userRole);
               }
               
-              console.log('📦 Dados da agência carregados:', {
-                equipments: userAgency.equipments?.length || 0,
-                expenses: userAgency.expenses?.length || 0,
-                jobs: userAgency.jobs?.length || 0,
-                kanbanBoard: userAgency.kanbanBoard ? 'presente' : 'ausente'
-              });
               setAgencyData(userAgency);
             } else if (!isAdmin) {
               console.log('👤 Usuário individual (não pertence a agência)');
-              
-              // Última tentativa: verificar se pode acessar alguma agência sem erros de permissão
-              try {
-                console.log('🔍 Tentativa final de verificar agências acessíveis...');
-                const allAgencies = await firestoreService.getAllAgencias();
-                
-                // Verificar se alguma agência é proprietária do usuário (baseado no ownerUID)
-                const ownedAgency = allAgencies.find((agency: any) => agency.ownerUID === firebaseUser.uid);
-                if (ownedAgency) {
-                  console.log('🏢✅ Encontrada agência própria:', ownedAgency.id);
-                  userType = 'company_owner';
-                  userRole = 'owner';
-                  setAgencyData({
-                    ...ownedAgency,
-                    userRole: 'owner'
-                  });
-                } else {
-                  setAgencyData(null);
-                }
-              } catch (fallbackError) {
-                console.warn('⚠️ Fallback de verificação de agências falhou:', fallbackError);
-                setAgencyData(null);
-              }
+              setAgencyData(null);
             } else {
-              // Admin pode não ter agência própria
               setAgencyData(null);
             }
             
           } catch (error) {
             console.error('❌ Erro ao buscar agência:', error);
-            
-            // Se for erro de permissão, tentar verificar se possui agência própria
-            if (error.code === 'permission-denied' && !isAdmin) {
-              console.log('🔍 Tentando verificar agência própria devido a erro de permissão...');
-              try {
-                const ownAgencyData = await firestoreService.getAgencyData(firebaseUser.uid);
-                if (ownAgencyData && (ownAgencyData as any).ownerUID === firebaseUser.uid) {
-                  console.log('🏢✅ Agência própria encontrada por ID direto');
-                  userType = 'company_owner';
-                  userRole = 'owner';
-                  setAgencyData({
-                    ...ownAgencyData,
-                    userRole: 'owner'
-                  });
-                } else {
-                  setAgencyData(null);
-                }
-              } catch (directError) {
-                console.warn('⚠️ Não foi possível verificar agência direta:', directError);
-                setAgencyData(null);
-              }
-            } else {
-              setAgencyData(null);
-            }
+            setAgencyData(null);
           }
           
           // Converter para o formato do contexto
@@ -203,7 +150,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           console.log('✅ Dados do usuário carregados com sucesso!');
           console.log('👤 Tipo de usuário FINAL:', userType);
-          console.log('🎭 Role do usuário:', userRole);
           console.log('📧 Email salvo no contexto:', userData.email);
           if (isAdmin) {
             console.log('👑 Usuário administrador confirmado com acesso total');
@@ -228,7 +174,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔐 Iniciando login...');
       await signInWithEmailAndPassword(auth, email, password);
-      // O token será automaticamente atualizado no onAuthStateChanged
     } catch (error) {
       console.error('❌ Erro no login:', error);
       throw error;
@@ -239,11 +184,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔐 Iniciando login com Google...');
       const provider = new GoogleAuthProvider();
-      // Forçar obtenção do email
       provider.addScope('email');
       provider.addScope('profile');
       await signInWithPopup(auth, provider);
-      // O token será automaticamente atualizado no onAuthStateChanged
     } catch (error) {
       console.error('❌ Erro no login com Google:', error);
       throw error;
@@ -255,7 +198,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('📝 Criando nova conta...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Criar documento do usuário na coleção 'usuarios'
       const newUserData: FirestoreUser = {
         email: email,
         uid: userCredential.user.uid,
@@ -269,7 +211,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dalilyValue: 0,
           desiredSalary: 0,
           workDays: 22
-        }
+        },
+        role: 'individual'
       };
 
       await firestoreService.createUser(newUserData);

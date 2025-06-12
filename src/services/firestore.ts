@@ -35,6 +35,7 @@ export interface FirestoreUser {
   subscription?: 'free' | 'premium' | 'enterprise';
   banned?: boolean;
   agencyId?: string;
+  role?: 'admin' | 'owner' | 'editor' | 'viewer' | 'individual';
 }
 
 export interface Collaborator {
@@ -51,7 +52,6 @@ export const firestoreService = {
       console.log('📝 Criando/atualizando usuário:', user.uid, 'com email:', user.email);
       const userRef = doc(db, 'usuarios', user.uid);
       
-      // Usar merge: true para não sobrescrever dados existentes desnecessariamente
       await setDoc(userRef, {
         ...user,
         updatedAt: serverTimestamp()
@@ -89,6 +89,79 @@ export const firestoreService = {
     }
   },
 
+  async getUserData(uid: string) {
+    try {
+      console.log('Buscando dados do usuário:', uid);
+      const userRef = doc(db, 'usuarios', uid);
+      const userDoc = await getDoc(userRef);
+
+      if (userDoc.exists()) {
+        console.log('Dados do usuário encontrados');
+        return userDoc.data() as FirestoreUser;
+      } else {
+        console.log('Usuário não encontrado');
+        return null;
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados do usuário:', error);
+      throw error;
+    }
+  },
+
+  async getUserAgencyData(uid: string) {
+    try {
+      console.log('🏢 Verificando agência do usuário:', uid);
+
+      // 1. Buscar dados do usuário
+      const userData = await this.getUserData(uid);
+      
+      if (!userData) {
+        console.log('❌ Usuário não encontrado');
+        return null;
+      }
+
+      // 2. Verificar se é admin (retornar acesso total)
+      if (userData.role === 'admin') {
+        console.log('👑 Usuário administrador - acesso total');
+        return {
+          id: 'admin',
+          name: 'Administração',
+          userRole: 'admin' as const,
+          createdBy: uid
+        };
+      }
+
+      // 3. Verificar se tem agencyId
+      if (!userData.agencyId) {
+        console.log('❌ Usuário não tem agencyId');
+        return null;
+      }
+
+      // 4. Buscar dados da agência
+      const agencyRef = doc(db, 'agencias', userData.agencyId);
+      const agencyDoc = await getDoc(agencyRef);
+
+      if (!agencyDoc.exists()) {
+        console.log('❌ Agência não encontrada:', userData.agencyId);
+        return null;
+      }
+
+      const agencyData = agencyDoc.data();
+      
+      console.log('✅ Agência encontrada:', userData.agencyId);
+      console.log('👤 Role do usuário:', userData.role);
+
+      return {
+        id: agencyDoc.id,
+        ...agencyData,
+        userRole: userData.role || 'viewer'
+      };
+    } catch (error) {
+      console.error('❌ Erro ao verificar agência:', error);
+      throw error;
+    }
+  },
+
   async updateUserField(uid: string, field: string, value: any) {
     try {
       console.log(`Atualizando campo ${field} do usuário ${uid}`);
@@ -100,7 +173,6 @@ export const firestoreService = {
       console.log('Campo atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao atualizar campo:', error);
-      // Se for erro de permissão no usuário, continuar sem falhar
       if (error.code === 'permission-denied') {
         console.warn('⚠️ Sem permissão para atualizar usuário, mas agência foi atualizada');
         return;
@@ -121,156 +193,10 @@ export const firestoreService = {
     }
   },
 
-  async getUserData(uid: string) {
-    try {
-      console.log('Buscando dados do usuário:', uid);
-      const userRef = doc(db, 'usuarios', uid);
-      const userDoc = await getDoc(userRef);
-
-      if (userDoc.exists()) {
-        console.log('Dados do usuário encontrados');
-        return userDoc.data() as FirestoreUser;
-      } else {
-        console.log('Usuário não encontrado');
-        return null;
-      }
-    } catch (error) {
-      console.error('Erro ao buscar dados do usuário:', error);
-      throw error;
-    }
-  },
-
-  async getUserAgency(uid: string) {
-    try {
-      console.log('🏢 Verificando agência do usuário:', uid);
-
-      // 1) Primeiro buscar dados do usuário para verificar agencyId
-      const userData = await this.getUserData(uid);
-      
-      if (userData?.agencyId) {
-        console.log('🔍 Usuário tem agencyId:', userData.agencyId);
-        
-        try {
-          // Tentar acessar a agência pelo agencyId
-          const agencyRef = doc(db, 'agencias', userData.agencyId);
-          const agencyDoc = await getDoc(agencyRef);
-          
-          if (agencyDoc.exists()) {
-            const agencyData = agencyDoc.data();
-            console.log('✅ Agência encontrada via agencyId:', userData.agencyId);
-            
-            // Verificar se é owner ou colaborador
-            let userRole = 'viewer'; // padrão
-            
-            if (agencyData.ownerUID === uid) {
-              userRole = 'owner';
-              console.log('👑 Usuário é proprietário da agência');
-            } else {
-              // Verificar se é colaborador
-              try {
-                const collaboratorRef = doc(db, 'agencias', userData.agencyId, 'colaboradores', uid);
-                const collaboratorDoc = await getDoc(collaboratorRef);
-                
-                if (collaboratorDoc.exists()) {
-                  userRole = collaboratorDoc.data().role || 'viewer';
-                  console.log('👥 Usuário é colaborador, role:', userRole);
-                }
-              } catch (error) {
-                console.warn('⚠️ Erro ao verificar colaborador:', error);
-              }
-            }
-            
-            return { 
-              id: agencyDoc.id, 
-              ...agencyData,
-              userRole: userRole
-            };
-          }
-        } catch (error) {
-          console.warn('⚠️ Erro ao acessar agência via agencyId:', error);
-        }
-      }
-
-      // 2) Verificar se o usuário é dono (agência com ID = uid) - compatibilidade
-      try {
-        const ownerAgencyRef = doc(db, 'agencias', uid);
-        const ownerAgencyDoc = await getDoc(ownerAgencyRef);
-
-        if (ownerAgencyDoc.exists()) {
-          const agencyData = ownerAgencyDoc.data();
-          console.log('✅ Usuário é proprietário da agência:', uid);
-          
-          // Atualizar agencyId no usuário se não existir
-          if (!userData?.agencyId) {
-            try {
-              await this.updateUserField(uid, 'agencyId', uid);
-              console.log('📝 AgencyId atualizado no usuário');
-            } catch (error) {
-              console.warn('⚠️ Não foi possível atualizar agencyId');
-            }
-          }
-          
-          return { 
-            id: ownerAgencyDoc.id, 
-            ...agencyData,
-            userRole: 'owner'
-          };
-        }
-      } catch (error) {
-        console.warn('⚠️ Erro ao verificar agência como owner:', error);
-      }
-
-      // 3) Buscar agências onde o usuário é colaborador (fallback)
-      try {
-        const agenciasRef = collection(db, 'agencias');
-        const snapshot = await getDocs(agenciasRef);
-        
-        for (const agencyDoc of snapshot.docs) {
-          try {
-            const collaboratorRef = doc(db, 'agencias', agencyDoc.id, 'colaboradores', uid);
-            const collaboratorDoc = await getDoc(collaboratorRef);
-            
-            if (collaboratorDoc.exists()) {
-              console.log('✅ Usuário é colaborador da agência:', agencyDoc.id);
-              
-              // Atualizar agencyId no usuário
-              if (!userData?.agencyId) {
-                try {
-                  await this.updateUserField(uid, 'agencyId', agencyDoc.id);
-                  console.log('📝 AgencyId atualizado no usuário');
-                } catch (error) {
-                  console.warn('⚠️ Não foi possível atualizar agencyId');
-                }
-              }
-              
-              return { 
-                id: agencyDoc.id, 
-                ...agencyDoc.data(),
-                userRole: collaboratorDoc.data().role || 'viewer'
-              };
-            }
-          } catch (error) {
-            // Continuar para próxima agência se houver erro de permissão
-            continue;
-          }
-        }
-      } catch (error) {
-        console.warn('⚠️ Erro ao buscar agências como colaborador:', error);
-      }
-
-      console.log('❌ Usuário não pertence a nenhuma agência');
-      return null;
-    } catch (error) {
-      console.error('❌ Erro ao verificar agência:', error);
-      throw error;
-    }
-  },
-
   async createAgencia(agenciaData: any) {
     try {
       console.log('🏢 Criando nova agência para UID:', agenciaData.ownerUID);
       
-      // Criar agência com ID = ownerUID (formato original)
       const agencyRef = doc(db, 'agencias', agenciaData.ownerUID);
       
       const newAgencia = {
@@ -286,7 +212,6 @@ export const firestoreService = {
       
       await setDoc(agencyRef, newAgencia);
 
-      // Criar documento do owner na subcoleção colaboradores
       const ownerCollaboratorRef = doc(db, 'agencias', agenciaData.ownerUID, 'colaboradores', agenciaData.ownerUID);
       await setDoc(ownerCollaboratorRef, {
         role: 'owner',
@@ -294,7 +219,6 @@ export const firestoreService = {
         addedBy: agenciaData.ownerUID
       });
 
-      // Tentar atualizar o usuário com o agencyId (pode falhar por permissão)
       try {
         await this.updateUserField(agenciaData.ownerUID, 'agencyId', agenciaData.ownerUID);
       } catch (error) {
@@ -352,21 +276,18 @@ export const firestoreService = {
     try {
       console.log('👥 Adicionando membro à agência:', { agenciaId, memberUID, role });
 
-      // Verificar se a agência existe
       const agencyData = await this.getAgencyData(agenciaId);
       if (!agencyData) {
         throw new Error('Agência não encontrada');
       }
 
-      // Criar documento do colaborador na subcoleção
       const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberUID);
       await setDoc(collaboratorRef, {
         role: role,
         addedAt: serverTimestamp(),
-        addedBy: memberUID // ou o ID de quem está adicionando
+        addedBy: memberUID
       });
 
-      // Tentar atualizar o usuário com o agencyId (pode falhar por permissão)
       try {
         await this.updateUserField(memberUID, 'agencyId', agenciaId);
       } catch (error) {
@@ -384,11 +305,9 @@ export const firestoreService = {
     try {
       console.log('👥 Removendo membro da agência:', { agenciaId, memberId });
 
-      // Remover documento da subcoleção colaboradores
       const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberId);
       await deleteDoc(collaboratorRef);
 
-      // Tentar remover agencyId do usuário (pode falhar por permissão)
       try {
         await this.updateUserField(memberId, 'agencyId', null);
       } catch (error) {
@@ -406,7 +325,6 @@ export const firestoreService = {
     try {
       console.log('👥 Atualizando role do membro:', { agenciaId, memberId, newRole });
 
-      // Atualizar documento na subcoleção colaboradores
       const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', memberId);
       await updateDoc(collaboratorRef, {
         role: newRole,
@@ -427,7 +345,6 @@ export const firestoreService = {
       const membros: Collaborator[] = [];
       
       try {
-        // Buscar colaboradores na subcoleção
         const colaboradoresRef = collection(db, 'agencias', agenciaId, 'colaboradores');
         const snapshot = await getDocs(colaboradoresRef);
         
@@ -436,7 +353,6 @@ export const firestoreService = {
           const uid = doc.id;
           
           try {
-            // Buscar dados do usuário
             const userData = await this.getUserData(uid);
             
             membros.push({
@@ -448,7 +364,6 @@ export const firestoreService = {
             });
           } catch (error) {
             console.warn('⚠️ Erro ao buscar dados do membro:', uid, error);
-            // Adicionar membro com dados limitados
             membros.push({
               uid: uid,
               role: collaboratorData.role as 'owner' | 'editor' | 'viewer',
@@ -464,7 +379,6 @@ export const firestoreService = {
       } catch (error) {
         console.warn('⚠️ Erro ao buscar colaboradores na subcoleção, usando fallback:', error);
         
-        // Fallback: pelo menos retornar o owner
         const agencyData = await this.getAgencyData(agenciaId);
         if (agencyData?.ownerUID) {
           try {
@@ -493,13 +407,11 @@ export const firestoreService = {
 
   async getUserRole(agenciaId: string, userId: string) {
     try {
-      // Verificar se é owner
       const agencyData = await this.getAgencyData(agenciaId);
       if (agencyData?.ownerUID === userId) {
         return 'owner';
       }
 
-      // Verificar na subcoleção colaboradores
       const collaboratorRef = doc(db, 'agencias', agenciaId, 'colaboradores', userId);
       const collaboratorDoc = await getDoc(collaboratorRef);
       
@@ -536,7 +448,6 @@ export const firestoreService = {
     try {
       console.log('💾 Salvando board do Kanban para agência:', agencyId);
       
-      // Usar coleção separada kanbanBoards conforme as regras
       const boardRef = doc(db, 'kanbanBoards', agencyId);
       
       const kanbanData = {
@@ -558,7 +469,6 @@ export const firestoreService = {
     try {
       console.log('📦 Buscando board do Kanban para agência:', agencyId);
       
-      // Buscar na coleção separada kanbanBoards
       const boardRef = doc(db, 'kanbanBoards', agencyId);
       const boardDoc = await getDoc(boardRef);
       
@@ -572,7 +482,6 @@ export const firestoreService = {
       return null;
     } catch (error) {
       console.error('❌ Erro ao buscar board do Kanban:', error);
-      // Se for erro de permissão, retorna null para criar um board inicial
       if (error.code === 'permission-denied') {
         console.log('⚠️ Sem permissão para acessar board, retornando null');
         return null;
@@ -739,7 +648,6 @@ export const firestoreService = {
     try {
       console.log('✅ Aceitando convite:', { inviteId, userId, agenciaId });
       
-      // Buscar dados do convite
       const inviteRef = doc(db, 'invites', inviteId);
       const inviteDoc = await getDoc(inviteRef);
       
@@ -749,10 +657,8 @@ export const firestoreService = {
       
       const inviteData = inviteDoc.data();
       
-      // Adicionar usuário como colaborador na agência
       await this.addAgenciaMember(agenciaId, userId, inviteData.role);
       
-      // Atualizar status do convite para aceito
       await updateDoc(inviteRef, {
         status: 'accepted',
         acceptedAt: serverTimestamp(),
