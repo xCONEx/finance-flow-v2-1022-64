@@ -607,7 +607,7 @@ const ImprovedKanban = () => {
                     <SelectContent>
                       {teamMembers.map((member) => (
                         <SelectItem key={member.uid} value={member.name}>
-                          {member.name} ({member.email})
+                          {member.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -823,7 +823,7 @@ const ImprovedKanban = () => {
                     <SelectContent>
                       {teamMembers.map((member) => (
                         <SelectItem key={member.uid} value={member.name}>
-                          {member.name} ({member.email})
+                          {member.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

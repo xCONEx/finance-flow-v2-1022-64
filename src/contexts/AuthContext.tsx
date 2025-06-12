@@ -99,8 +99,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               } else if (userAgency.colaboradores && userAgency.colaboradores[firebaseUser.uid]) {
                 // Verificar role do colaborador
                 userRole = userAgency.colaboradores[firebaseUser.uid];
-                userType = 'employee';
+                userType = 'employee'; // ✅ Corrigido: definir como employee quando for colaborador
                 console.log('👥 Usuário é colaborador da agência, role:', userRole);
+              } else {
+                // Se está na agência mas não é owner nem colaborador registrado, também é employee
+                userType = 'employee';
+                userRole = 'viewer';
+                console.log('👥 Usuário é membro da agência (role padrão: viewer)');
               }
               
               console.log('📦 Dados da agência carregados:', {
