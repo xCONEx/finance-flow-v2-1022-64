@@ -123,7 +123,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setAgencyData(userAgency);
             } else if (!isAdmin) {
               console.log('👤 Usuário individual (não pertence a agência)');
-              setAgencyData(null);
+              
+              // Última tentativa: verificar se pode acessar alguma agência sem erros de permissão
+              try {
+                console.log('🔍 Tentativa final de verificar agências acessíveis...');
+                const allAgencies = await firestoreService.getAllAgencias();
+                
+                // Verificar se alguma agência é proprietária do usuário (baseado no ownerUID)
+                const ownedAgency = allAgencies.find(agency => agency.ownerUID === firebaseUser.uid);
+                if (ownedAgency) {
+                  console.log('🏢✅ Encontrada agência própria:', ownedAgency.id);
+                  userType = 'company_owner';
+                  userRole = 'owner';
+                  setAgencyData({
+                    ...ownedAgency,
+                    userRole: 'owner'
+                  });
+                } else {
+                  setAgencyData(null);
+                }
+              } catch (fallbackError) {
+                console.warn('⚠️ Fallback de verificação de agências falhou:', fallbackError);
+                setAgencyData(null);
+              }
             } else {
               // Admin pode não ter agência própria
               setAgencyData(null);
@@ -131,7 +153,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
           } catch (error) {
             console.error('❌ Erro ao buscar agência:', error);
-            if (!isAdmin) {
+            
+            // Se for erro de permissão, tentar verificar se possui agência própria
+            if (error.code === 'permission-denied' && !isAdmin) {
+              console.log('🔍 Tentando verificar agência própria devido a erro de permissão...');
+              try {
+                const ownAgencyData = await firestoreService.getAgencyData(firebaseUser.uid);
+                if (ownAgencyData && ownAgencyData.ownerUID === firebaseUser.uid) {
+                  console.log('🏢✅ Agência própria encontrada por ID direto');
+                  userType = 'company_owner';
+                  userRole = 'owner';
+                  setAgencyData({
+                    ...ownAgencyData,
+                    userRole: 'owner'
+                  });
+                } else {
+                  setAgencyData(null);
+                }
+              } catch (directError) {
+                console.warn('⚠️ Não foi possível verificar agência direta:', directError);
+                setAgencyData(null);
+              }
+            } else {
               setAgencyData(null);
             }
           }

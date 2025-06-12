@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { 
@@ -186,8 +187,8 @@ const ImprovedKanban = () => {
         setBoard(initialBoard);
         setTags(initialTags);
         
-        // Salvar o board inicial (qualquer colaborador pode criar)
-        if (canEdit) {
+        // Salvar o board inicial apenas se tiver permissão
+        if (canEdit && userRole === 'owner') {
           try {
             await saveKanbanState(initialBoard, initialTags);
           } catch (saveError) {
@@ -213,7 +214,10 @@ const ImprovedKanban = () => {
   };
 
   const saveKanbanState = async (boardData: KanbanBoard, tagsData: Tag[] = tags) => {
-    if (!agencyData) return;
+    if (!agencyData || !canEdit) {
+      console.log('⚠️ Sem permissão para salvar ou agência não encontrada');
+      return;
+    }
 
     try {
       console.log('💾 Salvando estado do Kanban...');
@@ -459,8 +463,8 @@ const ImprovedKanban = () => {
   // Ordem fixa das colunas
   const fixedColumnOrder = ['todo', 'inProgress', 'review', 'done'];
 
-  // Verificar se o usuário pode editar (todos os colaboradores podem editar o kanban)
-  const canEdit = userRole === 'owner' || userRole === 'editor' || userRole === 'viewer';
+  // Verificar se o usuário pode editar - apenas owners e editors podem editar
+  const canEdit = userRole === 'owner' || userRole === 'editor';
 
   // Verificar se o usuário faz parte de uma empresa
   if (!agencyData) {
@@ -516,6 +520,9 @@ const ImprovedKanban = () => {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Adicionar Nova Tarefa</DialogTitle>
+                <DialogDescription>
+                  Preencha os campos abaixo para criar uma nova tarefa no kanban.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <Input
@@ -700,6 +707,12 @@ const ImprovedKanban = () => {
                 </div>
               )}
             </DialogTitle>
+            <DialogDescription>
+              {isEditingTask && canEdit ? 
+                "Edite os campos abaixo para atualizar a tarefa." : 
+                "Visualize ou edite os detalhes desta tarefa."
+              }
+            </DialogDescription>
           </DialogHeader>
           
           {selectedTask && (
