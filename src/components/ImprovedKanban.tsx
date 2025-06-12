@@ -82,43 +82,104 @@ const ImprovedKanban = () => {
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>('');
   const { user, agencyData } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (agencyData) {
+    if (agencyData && user) {
+      loadUserRole();
       loadKanbanData();
       loadTeamMembers();
     } else {
       setIsLoading(false);
     }
-  }, [agencyData]);
+  }, [agencyData, user]);
+
+  const loadUserRole = async () => {
+    if (!agencyData || !user) return;
+    
+    try {
+      // Verificar se é owner
+      if (agencyData.ownerUID === user.id) {
+        setUserRole('owner');
+        return;
+      }
+      
+      // Buscar role como colaborador
+      const role = await firestoreService.getUserRole(agencyData.id, user.id);
+      setUserRole(role || 'viewer');
+    } catch (error) {
+      console.error('❌ Erro ao buscar role:', error);
+      setUserRole('viewer');
+    }
+  };
 
   const loadTeamMembers = async () => {
     if (!agencyData) return;
     
     try {
-      console.log('👥 Carregando membros da equipe usando novo método...');
-      const members = await firestoreService.getCompanyMembers(agencyData.id);
+      console.log('👥 Carregando membros da equipe...');
       
-      const formattedMembers: TeamMember[] = members.map(member => ({
-        uid: member.uid,
-        email: member.email || 'Email não disponível',
-        name: member.name || member.email?.split('@')[0] || 'Nome não disponível',
-        role: member.role
-      }));
+      // Primeiro tentar o método padrão
+      try {
+        const members = await firestoreService.getCompanyMembers(agencyData.id);
+        const formattedMembers: TeamMember[] = members.map(member => ({
+          uid: member.uid,
+          email: member.email || 'Email não disponível',
+          name: member.name || member.email?.split('@')[0] || 'Nome não disponível',
+          role: member.role
+        }));
+        
+        setTeamMembers(formattedMembers);
+        console.log('✅ Membros carregados:', formattedMembers.length);
+        return;
+      } catch (memberError) {
+        console.warn('⚠️ Erro ao carregar membros, usando fallback:', memberError);
+      }
       
-      setTeamMembers(formattedMembers);
-      console.log('✅ Membros carregados:', formattedMembers.length);
+      // Fallback: adicionar pelo menos o usuário atual e owner
+      const fallbackMembers: TeamMember[] = [];
+      
+      // Adicionar owner se disponível
+      if (agencyData.ownerUID) {
+        try {
+          const ownerData = await firestoreService.getUserData(agencyData.ownerUID);
+          if (ownerData) {
+            fallbackMembers.push({
+              uid: agencyData.ownerUID,
+              email: ownerData.email,
+              name: ownerData.name || ownerData.email.split('@')[0],
+              role: 'owner'
+            });
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro ao buscar dados do owner');
+        }
+      }
+      
+      // Adicionar usuário atual se não for o owner
+      if (user && user.id !== agencyData.ownerUID) {
+        fallbackMembers.push({
+          uid: user.id,
+          email: user.email,
+          name: user.name,
+          role: userRole || 'editor'
+        });
+      }
+      
+      setTeamMembers(fallbackMembers);
+      console.log('✅ Membros carregados (fallback):', fallbackMembers.length);
+      
     } catch (error) {
       console.error('❌ Erro ao carregar membros da equipe:', error);
-      // Fallback: adicionar pelo menos o owner atual
+      // Último fallback: apenas usuário atual
       if (user) {
         setTeamMembers([{
           uid: user.id,
           email: user.email,
           name: user.name,
-          role: 'owner'
+          role: 'editor'
         }]);
       }
     }
@@ -130,14 +191,25 @@ const ImprovedKanban = () => {
     try {
       console.log('📦 Carregando dados do Kanban para empresa:', agencyData.id);
       
-      const existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
+      let existingBoard = null;
+      
+      // Tentar carregar board existente
+      try {
+        existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
+      } catch (loadError) {
+        console.warn('⚠️ Erro ao carregar board, usando dados locais se disponíveis:', loadError);
+        // Se há dados no agencyData, usar eles
+        if (agencyData.kanbanBoard) {
+          existingBoard = agencyData.kanbanBoard;
+        }
+      }
       
       if (existingBoard && existingBoard.columns) {
-        console.log('✅ Board existente carregado do Firebase');
+        console.log('✅ Board existente carregado');
         setBoard(existingBoard.columns);
         setTags(existingBoard.tags || []);
       } else {
-        console.log('📝 Criando board inicial para empresa');
+        console.log('📝 Criando board inicial');
         const initialBoard: KanbanBoard = {
           'todo': {
             title: 'A Fazer',
@@ -170,16 +242,18 @@ const ImprovedKanban = () => {
         setBoard(initialBoard);
         setTags(initialTags);
         
-        // Tentar salvar o board inicial
-        try {
-          await saveKanbanState(initialBoard, initialTags);
-        } catch (saveError) {
-          console.warn('⚠️ Não foi possível salvar o board inicial, mas continuando...', saveError);
+        // Tentar salvar o board inicial (apenas se for owner ou admin)
+        if (userRole === 'owner' || user?.userType === 'admin') {
+          try {
+            await saveKanbanState(initialBoard, initialTags);
+          } catch (saveError) {
+            console.warn('⚠️ Não foi possível salvar o board inicial:', saveError);
+          }
         }
       }
     } catch (error) {
       console.error('❌ Erro ao carregar Kanban:', error);
-      // Em caso de erro, criar um board local temporário
+      // Criar board local temporário
       const fallbackBoard: KanbanBoard = {
         'todo': { title: 'A Fazer', color: 'bg-red-50 border-red-200', items: [] },
         'inProgress': { title: 'Em Produção', color: 'bg-yellow-50 border-yellow-200', items: [] },
@@ -198,21 +272,30 @@ const ImprovedKanban = () => {
     if (!agencyData) return;
 
     try {
-      console.log('💾 Salvando estado do Kanban no Firebase...');
+      console.log('💾 Salvando estado do Kanban...');
       const kanbanData = {
         columns: boardData,
         tags: tagsData,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.id
       };
+      
       await firestoreService.saveKanbanBoard(agencyData.id, kanbanData);
       console.log('✅ Kanban salvo com sucesso');
     } catch (error) {
       console.error('❌ Erro ao salvar Kanban:', error);
-      // Não mostrar erro para o usuário se for problema de permissão
-      if (error.code !== 'permission-denied') {
+      
+      // Mostrar toast apropriado baseado no tipo de erro
+      if (error.code === 'permission-denied') {
         toast({
-          title: "Aviso",
-          description: "Não foi possível salvar as alterações automaticamente",
+          title: "Aviso de Permissão",
+          description: "Você não tem permissão para salvar alterações. Suas mudanças são apenas locais.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Erro ao Salvar",
+          description: "Não foi possível salvar as alterações. Tente novamente.",
           variant: "destructive"
         });
       }
@@ -432,6 +515,9 @@ const ImprovedKanban = () => {
   // Ordem fixa das colunas
   const fixedColumnOrder = ['todo', 'inProgress', 'review', 'done'];
 
+  // Verificar se o usuário pode editar (owner, admin ou editor)
+  const canEdit = userRole === 'owner' || user?.userType === 'admin' || userRole === 'editor';
+
   // Verificar se o usuário faz parte de uma empresa
   if (!agencyData) {
     return (
@@ -471,118 +557,121 @@ const ImprovedKanban = () => {
           </h2>
           <p className="text-gray-600">
             {agencyData.name} - Gerencie o fluxo dos seus projetos
+            {!canEdit && <span className="text-orange-600 ml-2">(Somente visualização)</span>}
           </p>
         </div>
 
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Tarefa
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Adicionar Nova Tarefa</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <Input
-                placeholder="Título da tarefa"
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-              />
-              
-              <Textarea
-                placeholder="Descrição detalhada"
-                value={newTaskDescription}
-                onChange={(e) => setNewTaskDescription(e.target.value)}
-              />
-
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="Valor (R$)"
-                  value={newTaskValue}
-                  onChange={(e) => setNewTaskValue(e.target.value)}
-                />
-                <Input
-                  type="date"
-                  value={newTaskDeadline}
-                  onChange={(e) => setNewTaskDeadline(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={newTaskResponsible} onValueChange={setNewTaskResponsible}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Responsável" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamMembers.map((member) => (
-                      <SelectItem key={member.uid} value={member.name}>
-                        {member.name} ({member.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={newTaskType} onValueChange={setNewTaskType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Filmagem">Filmagem</SelectItem>
-                    <SelectItem value="Edição">Edição</SelectItem>
-                    <SelectItem value="Motion Graphics">Motion Graphics</SelectItem>
-                    <SelectItem value="Geral">Geral</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Coluna" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todo">A Fazer</SelectItem>
-                    <SelectItem value="inProgress">Em Produção</SelectItem>
-                    <SelectItem value="review">Em Revisão</SelectItem>
-                    <SelectItem value="done">Finalizado</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={newTaskPriority} onValueChange={(value: 'alta' | 'média' | 'baixa') => setNewTaskPriority(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Prioridade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="média">Média</SelectItem>
-                    <SelectItem value="baixa">Baixa</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">Etiquetas</label>
-                <TagManager 
-                  tags={tags}
-                  onAddTag={handleAddTag}
-                  onRemoveTag={handleRemoveTag}
-                  selectedTags={selectedTags}
-                  onTagSelect={handleTagSelect}
-                />
-              </div>
-
-              <Button onClick={handleAddTask} className="w-full">
-                Adicionar Tarefa
+        {canEdit && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Tarefa
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Adicionar Nova Tarefa</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Input
+                  placeholder="Título da tarefa"
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                />
+                
+                <Textarea
+                  placeholder="Descrição detalhada"
+                  value={newTaskDescription}
+                  onChange={(e) => setNewTaskDescription(e.target.value)}
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Valor (R$)"
+                    value={newTaskValue}
+                    onChange={(e) => setNewTaskValue(e.target.value)}
+                  />
+                  <Input
+                    type="date"
+                    value={newTaskDeadline}
+                    onChange={(e) => setNewTaskDeadline(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={newTaskResponsible} onValueChange={setNewTaskResponsible}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teamMembers.map((member) => (
+                        <SelectItem key={member.uid} value={member.name}>
+                          {member.name} ({member.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <Select value={newTaskType} onValueChange={setNewTaskType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Filmagem">Filmagem</SelectItem>
+                      <SelectItem value="Edição">Edição</SelectItem>
+                      <SelectItem value="Motion Graphics">Motion Graphics</SelectItem>
+                      <SelectItem value="Geral">Geral</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Coluna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todo">A Fazer</SelectItem>
+                      <SelectItem value="inProgress">Em Produção</SelectItem>
+                      <SelectItem value="review">Em Revisão</SelectItem>
+                      <SelectItem value="done">Finalizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={newTaskPriority} onValueChange={(value: 'alta' | 'média' | 'baixa') => setNewTaskPriority(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Prioridade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alta">Alta</SelectItem>
+                      <SelectItem value="média">Média</SelectItem>
+                      <SelectItem value="baixa">Baixa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Etiquetas</label>
+                  <TagManager 
+                    tags={tags}
+                    onAddTag={handleAddTag}
+                    onRemoveTag={handleRemoveTag}
+                    selectedTags={selectedTags}
+                    onTagSelect={handleTagSelect}
+                  />
+                </div>
+
+                <Button onClick={handleAddTask} className="w-full">
+                  Adicionar Tarefa
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
+      <DragDropContext onDragEnd={canEdit ? handleDragEnd : () => {}}>
         <div className="grid lg:grid-cols-4 gap-6">
           {fixedColumnOrder.map((columnId) => {
             const column = board[columnId];
@@ -599,7 +688,7 @@ const ImprovedKanban = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Droppable droppableId={columnId}>
+                  <Droppable droppableId={columnId} isDropDisabled={!canEdit}>
                     {(provided, snapshot) => (
                       <div
                         {...provided.droppableProps}
@@ -609,7 +698,12 @@ const ImprovedKanban = () => {
                         }`}
                       >
                         {(column.items || []).map((item, index) => (
-                          <Draggable key={item.id} draggableId={item.id} index={index}>
+                          <Draggable 
+                            key={item.id} 
+                            draggableId={item.id} 
+                            index={index}
+                            isDragDisabled={!canEdit}
+                          >
                             {(provided, snapshot) => (
                               <div
                                 ref={provided.innerRef}
@@ -643,22 +737,24 @@ const ImprovedKanban = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               Detalhes da Tarefa
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsEditingTask(!isEditingTask)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleDeleteTask(selectedTask?.id || '')}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              {canEdit && (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsEditingTask(!isEditingTask)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDeleteTask(selectedTask?.id || '')}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </DialogTitle>
           </DialogHeader>
           
@@ -666,7 +762,7 @@ const ImprovedKanban = () => {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium">Título</label>
-                {isEditingTask ? (
+                {isEditingTask && canEdit ? (
                   <Input
                     value={selectedTask.title}
                     onChange={(e) => setSelectedTask({...selectedTask, title: e.target.value})}
@@ -678,7 +774,7 @@ const ImprovedKanban = () => {
 
               <div>
                 <label className="text-sm font-medium">Descrição</label>
-                {isEditingTask ? (
+                {isEditingTask && canEdit ? (
                   <Textarea
                     value={selectedTask.description}
                     onChange={(e) => setSelectedTask({...selectedTask, description: e.target.value})}
@@ -691,7 +787,7 @@ const ImprovedKanban = () => {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-sm font-medium">Valor</label>
-                  {isEditingTask ? (
+                  {isEditingTask && canEdit ? (
                     <Input
                       value={selectedTask.value}
                       onChange={(e) => setSelectedTask({...selectedTask, value: e.target.value})}
@@ -702,7 +798,7 @@ const ImprovedKanban = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Prazo</label>
-                  {isEditingTask ? (
+                  {isEditingTask && canEdit ? (
                     <Input
                       type="date"
                       value={selectedTask.deadline}
@@ -716,7 +812,7 @@ const ImprovedKanban = () => {
 
               <div>
                 <label className="text-sm font-medium">Responsável</label>
-                {isEditingTask ? (
+                {isEditingTask && canEdit ? (
                   <Select
                     value={selectedTask.responsible}
                     onValueChange={(value) => setSelectedTask({...selectedTask, responsible: value})}
@@ -739,7 +835,7 @@ const ImprovedKanban = () => {
 
               <div>
                 <label className="text-sm font-medium">Prioridade</label>
-                {isEditingTask ? (
+                {isEditingTask && canEdit ? (
                   <Select
                     value={selectedTask.priority}
                     onValueChange={(value: 'alta' | 'média' | 'baixa') => setSelectedTask({...selectedTask, priority: value})}
@@ -781,7 +877,7 @@ const ImprovedKanban = () => {
                 </div>
               )}
 
-              {isEditingTask && (
+              {isEditingTask && canEdit && (
                 <Button onClick={handleSaveTaskEdit} className="w-full">
                   <Save className="h-4 w-4 mr-2" />
                   Salvar Alterações
