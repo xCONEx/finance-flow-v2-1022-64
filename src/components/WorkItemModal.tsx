@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Briefcase, Save } from 'lucide-react';
 import {
@@ -13,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 const EQUIPMENT_CATEGORIES = [
@@ -34,6 +34,7 @@ interface WorkItemModalProps {
 
 const WorkItemModal = ({ open, onOpenChange, editingItem }: WorkItemModalProps) => {
   const { addWorkItem, updateWorkItem } = useAppContext();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     description: '',
     category: '',
@@ -72,15 +73,29 @@ const WorkItemModal = ({ open, onOpenChange, editingItem }: WorkItemModalProps) 
       return;
     }
 
+    if (!user) {
+      toast({
+        title: "Erro",
+        description: "Usuário não encontrado.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const itemData = {
+      ...formData,
+      userId: user.id
+    };
+
     try {
       if (editingItem) {
-        await updateWorkItem(editingItem.id, formData);
+        await updateWorkItem(editingItem.id, itemData);
         toast({
           title: "Item Atualizado",
           description: "O item foi atualizado com sucesso.",
         });
       } else {
-        await addWorkItem(formData);
+        await addWorkItem(itemData);
         toast({
           title: "Item Adicionado",
           description: "O item de trabalho foi adicionado com sucesso.",

@@ -9,17 +9,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { PercentageInput } from '@/components/ui/percentage-input';
 import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Job } from '../types';
 import { toast } from '@/hooks/use-toast';
 
 interface JobEditorProps {
   jobId?: string;
   onClose: () => void;
-  onSaved?: () => void; // NOVO: Callback quando salvar
+  onSaved?: () => void;
 }
 
 const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
   const { jobs, addJob, updateJob } = useAppContext();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     description: '',
     client: '',
@@ -63,7 +65,6 @@ const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
     }
   }, [jobId, jobs]);
 
-  // Função para salvar status imediatamente no Firebase
   const handleStatusChange = async (newStatus: Job['status']) => {
     setFormData(prev => ({ ...prev, status: newStatus }));
     
@@ -86,7 +87,6 @@ const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
     }
   };
 
-  // Calcular valores automaticamente
   useEffect(() => {
     const costs = formData.logistics + formData.equipment + formData.assistance;
     const discountAmount = (formData.serviceValue * formData.discountValue) / 100;
@@ -109,9 +109,19 @@ const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
       return;
     }
 
+    if (!user) {
+      toast({
+        title: "Erro",
+        description: "Usuário não encontrado.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const jobData = {
       ...formData,
       eventDate: new Date(formData.eventDate).toISOString(),
+      userId: user.id
     };
 
     try {
@@ -130,7 +140,6 @@ const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
         });
       }
       
-      // NOVO: Chamar callback se disponível
       if (onSaved) {
         onSaved();
       }
@@ -156,7 +165,6 @@ const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
           </Button>
         </CardHeader>
         <CardContent className="space-y-4 p-4 md:p-6">
-          {/* MELHORADO: Grid responsivo */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="description">Descrição *</Label>
@@ -180,7 +188,6 @@ const JobEditor = ({ jobId, onClose, onSaved }: JobEditorProps) => {
             </div>
           </div>
 
-          {/* MELHORADO: Grid mais compacto no mobile */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="eventDate">Data do Evento</Label>

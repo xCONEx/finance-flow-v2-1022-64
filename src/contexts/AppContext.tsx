@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { firestoreService } from '../services/firestore';
@@ -9,6 +10,7 @@ interface AppContextType {
   workItems: WorkItem[];
   workRoutine: WorkRoutine | null;
   tasks: Task[];
+  loading: boolean;
   addJob: (job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateJob: (id: string, updates: Partial<Job>) => Promise<void>;
   deleteJob: (id: string) => Promise<void>;
@@ -43,10 +45,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [workItems, setWorkItems] = useState<WorkItem[]>([]);
   const [workRoutine, setWorkRoutine] = useState<WorkRoutine | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const refreshData = async () => {
     if (!user || !userData) return;
 
+    setLoading(true);
     try {
       console.log('🔄 Carregando dados do AppContext...');
       
@@ -67,6 +71,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('✅ Dados carregados com sucesso!');
     } catch (error) {
       console.error('❌ Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -291,6 +297,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workItems,
       workRoutine,
       tasks,
+      loading,
       addJob,
       updateJob,
       deleteJob,

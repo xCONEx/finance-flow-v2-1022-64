@@ -22,6 +22,13 @@ export interface FirestoreUser {
   email: string;
   name: string;
   logobase64: string;
+  imageuser?: string;
+  phone?: string;
+  company?: string;
+  personalInfo?: {
+    phone?: string;
+    company?: string;
+  };
   companyId?: string;
   companyName?: string;
   equipments: any[];
@@ -86,16 +93,6 @@ export const firestoreService = {
     }
   },
 
-  updateField: async (collection: string, docId: string, field: string, value: any): Promise<void> => {
-    try {
-      const docRef = doc(db, collection, docId);
-      await updateDoc(docRef, { [field]: value });
-    } catch (error) {
-      console.error("Error updating field:", error);
-      throw error;
-    }
-  },
-
   getAllUsers: async (): Promise<any[]> => {
     try {
       const querySnapshot = await getDocs(collection(db, 'usuarios'));
@@ -111,7 +108,6 @@ export const firestoreService = {
 
   getAnalyticsData: async (): Promise<any> => {
     try {
-      // Simple analytics based on users and basic metrics
       const users = await this.getAllUsers();
       const totalUsers = users.length;
       const adminUsers = users.filter(u => u.userType === 'admin').length;
@@ -121,7 +117,7 @@ export const firestoreService = {
       return {
         overview: {
           totalUsers,
-          totalAgencias: 0, // No agencies in simplified system
+          totalAgencias: 0,
           totalRevenue: 0,
           activeUsers: totalUsers
         },
@@ -154,27 +150,6 @@ export const firestoreService = {
     } catch (error) {
       console.error("Error fetching analytics:", error);
       return null;
-    }
-  },
-
-  getUserByEmail: async (email: string): Promise<{ id: string; name: string; email: string } | null> => {
-    try {
-      const q = query(collection(db, 'usuarios'), where('email', '==', email));
-      const querySnapshot = await getDocs(q);
-  
-      if (!querySnapshot.empty) {
-        const doc = querySnapshot.docs[0];
-        return {
-          id: doc.id,
-          name: doc.data().name || '',
-          email: doc.data().email || ''
-        };
-      } else {
-        return null;
-      }
-    } catch (error) {
-      console.error("Error fetching user by email:", error);
-      throw error;
     }
   },
 
