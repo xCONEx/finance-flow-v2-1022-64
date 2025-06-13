@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,34 +11,30 @@ import RecentJobs from './RecentJobs';
 import TaskList from './TaskList';
 import AddTaskModal from './AddTaskModal';
 import ManualValueModal from '@/components/ManualValueModal';
-import ExpenseModal from '@/components/ExpenseModal'; // ajuste o caminho se necessário
-
+import ExpenseModal from '@/components/ExpenseModal';
 
 const Dashboard = () => {
-  const { user, userData, agencyData } = useAuth();
+  const { user, userData } = useAuth();
   const { currentTheme } = useTheme();
   const { formatValue } = usePrivacy();
   const { jobs, monthlyCosts, workItems, workRoutine, tasks, addMonthlyCost } = useAppContext();
   const [showTaskModal, setShowTaskModal] = useState(false);
 
-  // CORRIGIDO: Dashboard sempre usa dados pessoais do usuário
-  // Apenas Kanban e Equipe são compartilhados com a empresa
-  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
+  // Dashboard always uses personal user data
+  const isCompanyUser = user?.userType === 'enterprise' && !!user.companyId;
   
-  // Dashboard sempre mostra dados pessoais
+  // Dashboard always shows personal data
   const currentData = userData;
 
-  // CORRIGIDO: Modal para adicionar valor manual
-const [showManualModal, setShowManualModal] = useState(false);
-const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
 
-
-  // CORRIGIDO: Filtrar apenas jobs pessoais (sem companyId)
+  // Filter only personal jobs (without companyId)
   const filteredJobs = jobs.filter(job => !job.companyId);
   const filteredMonthlyCosts = monthlyCosts.filter(cost => !cost.companyId);
   const filteredWorkItems = workItems.filter(item => !item.companyId);
 
-  // CORRIGIDO: Calcular apenas jobs aprovados pessoais
+  // Calculate only approved personal jobs
   const approvedJobs = filteredJobs.filter(job => job.status === 'aprovado');
   const totalJobs = approvedJobs.length;
   const totalJobsValue = approvedJobs.reduce((sum, job) => {
@@ -54,8 +49,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
   const completedTasks = tasks.filter(task => task.completed).length;
   const totalTasks = tasks.length;
 
-  // Log para debug
-  console.log('📊 Dashboard - Sempre pessoal:', 'Jobs aprovados:', approvedJobs.length, 'Total value:', totalJobsValue);
+  console.log('📊 Dashboard - Always personal:', 'Approved jobs:', approvedJobs.length, 'Total value:', totalJobsValue);
 
   const metrics = [
     {
@@ -99,7 +93,6 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
   };
 
   const handleExportReport = () => {
-    // Generate a simple report
     const report = {
       data: new Date().toISOString(),
       totalJobs,
@@ -124,19 +117,17 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
 
   return (
     <div className="space-y-6 pb-20 md:pb-6">
-     
-
-      {/* Header simplificado */}
+      {/* Header */}
       <div className="text-center space-y-4">
         <h1 className="text-3xl font-bold">Dashboard Pessoal</h1>
         
-        {/* Informação para colaboradores */}
+        {/* Company user info */}
         {isCompanyUser && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 rounded-lg p-4 max-w-2xl mx-auto">
             <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
               <Building2 className="h-5 w-5" />
               <p className="text-sm">
-                <strong>Empresa:</strong> {agencyData.name} | 
+                <strong>Empresa:</strong> {user.companyName} | 
                 <span className="ml-2">Este dashboard mostra seus dados pessoais.</span>
               </p>
             </div>
@@ -176,7 +167,6 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Cost Distribution Chart */}
         <Card className="lg:col-span-1 transition-all duration-300 hover:shadow-lg">
           <CardHeader>
             <CardTitle>Distribuição de Custos</CardTitle>
@@ -186,9 +176,7 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
           </CardContent>
         </Card>
 
-        {/* Recent Jobs */}
         <Card className="lg:col-span-2 transition-all duration-300 hover:shadow-lg">
-
           <CardContent>
             <RecentJobs />
           </CardContent>
@@ -197,7 +185,6 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
 
       {/* Tasks and Quick Actions */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Task List */}
         <Card className="transition-all duration-300 hover:shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -218,63 +205,60 @@ const [showExpenseModal, setShowExpenseModal] = useState(false);
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
         <Card className="transition-all duration-300 hover:shadow-lg">
-  <CardHeader>
-    <CardTitle>Ações Rápidas</CardTitle>
-  </CardHeader>
-  <CardContent className="space-y-3">
-    <Button
-      className={`w-full bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 transition-all duration-300 hover:scale-105`}
-      onClick={() => setShowManualModal(true)} // ✅ Abre ManualValueModal
-    >
-      <Calculator className="mr-2 h-4 w-4" />
-      Adicionar Valor Manual
-    </Button>
+          <CardHeader>
+            <CardTitle>Ações Rápidas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button
+              className={`w-full bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 transition-all duration-300 hover:scale-105`}
+              onClick={() => setShowManualModal(true)}
+            >
+              <Calculator className="mr-2 h-4 w-4" />
+              Adicionar Valor Manual
+            </Button>
 
-    <Button
-      variant="outline"
-      className="w-full transition-all duration-300 hover:scale-105"
-      onClick={() => setShowExpenseModal(true)} // ✅ Abre ExpenseModal
-    >
-      <DollarSign className="mr-2 h-4 w-4" />
-      Adicionar Custo
-    </Button>
+            <Button
+              variant="outline"
+              className="w-full transition-all duration-300 hover:scale-105"
+              onClick={() => setShowExpenseModal(true)}
+            >
+              <DollarSign className="mr-2 h-4 w-4" />
+              Adicionar Custo
+            </Button>
 
-    <Button
-      variant="outline"
-      className="w-full transition-all duration-300 hover:scale-105"
-      onClick={handleExportReport}
-    >
-      <TrendingUp className="mr-2 h-4 w-4" />
-      Exportar Relatório
-    </Button>
+            <Button
+              variant="outline"
+              className="w-full transition-all duration-300 hover:scale-105"
+              onClick={handleExportReport}
+            >
+              <TrendingUp className="mr-2 h-4 w-4" />
+              Exportar Relatório
+            </Button>
 
-    {/* Summary Stats */}
-    <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-      <div className="text-sm space-y-2">
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">Faturamento Total:</span>
-          <span className="font-semibold">{formatValue(totalJobsValue)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">Jobs Pendentes:</span>
-          <span className="font-semibold">{filteredJobs.filter(j => j.status === 'pendente').length}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">Taxa de Conclusão:</span>
-          <span className="font-semibold">
-            {totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0}%
-          </span>
-        </div>
-      </div>
-    </div>
-  </CardContent>
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-sm space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Faturamento Total:</span>
+                  <span className="font-semibold">{formatValue(totalJobsValue)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Jobs Pendentes:</span>
+                  <span className="font-semibold">{filteredJobs.filter(j => j.status === 'pendente').length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Taxa de Conclusão:</span>
+                  <span className="font-semibold">
+                    {totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
 
-  {/* Modais que abrem ao clicar nos botões */}
-  <ManualValueModal open={showManualModal} onOpenChange={setShowManualModal} />
-  <ExpenseModal open={showExpenseModal} onOpenChange={setShowExpenseModal} />
-</Card>
+          <ManualValueModal open={showManualModal} onOpenChange={setShowManualModal} />
+          <ExpenseModal open={showExpenseModal} onOpenChange={setShowExpenseModal} />
+        </Card>
       </div>
 
       <AddTaskModal open={showTaskModal} onOpenChange={setShowTaskModal} />
