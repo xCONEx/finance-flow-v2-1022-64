@@ -3,8 +3,7 @@ import React, { useState } from 'react';
 import Navigation from '../components/Navigation';
 import Dashboard from '../components/Dashboard';
 import PricingCalculator from '../components/PricingCalculator';
-import ImprovedKanban from '../components/ImprovedKanban';
-import CompanyDashboard from '../components/CompanyDashboard';
+import VideoKanban from '../components/VideoKanban';
 import AdminPanel from '../components/AdminPanel';
 import Settings from '../components/Settings';
 import MonthlyCosts from '../components/MonthlyCosts';
@@ -16,11 +15,9 @@ import { useAuth } from '../contexts/AuthContext';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { user, agencyData } = useAuth();
+  const { user } = useAuth();
 
-  const isCompanyUser = user?.userType === 'company_owner' || user?.userType === 'employee' || agencyData;
-  const isOwner = agencyData?.userRole === 'owner';
-  const isAdmin = user?.userType === 'admin' || agencyData?.userRole === 'admin';
+  const isAdmin = user?.userType === 'admin';
 
   const renderContent = () => {
     switch (activeTab) {
@@ -28,16 +25,14 @@ const Index = () => {
         return <Dashboard />;
       case 'calculator':
         return <PricingCalculator />;
-      case 'kanban':
-        return isCompanyUser ? <ImprovedKanban /> : <Dashboard />;
+      case 'projetos':
+        return <VideoKanban />;
       case 'costs':
         return <MonthlyCosts />;
       case 'items':
         return <WorkItems />;
       case 'routine':
         return <WorkRoutine />;
-      case 'team':
-        return isOwner ? <CompanyDashboard /> : <Dashboard />;
       case 'admin':
         return isAdmin ? <AdminPanel /> : <Dashboard />;
       case 'settings':
@@ -56,7 +51,6 @@ const Index = () => {
       <Navigation 
         activeTab={activeTab} 
         onTabChange={setActiveTab}
-        showTeamOption={isOwner} // Passa propriedade para controlar exibição
       />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">

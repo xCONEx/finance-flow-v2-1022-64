@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Home, Calculator, Kanban, Users, Settings as SettingsIcon, DollarSign, Briefcase, Clock, Menu, User, Eye, EyeOff } from 'lucide-react';
+import { Home, Calculator, Kanban, Settings as SettingsIcon, DollarSign, Briefcase, Clock, Menu, User, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -14,7 +14,7 @@ interface NavigationProps {
 }
 
 const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
-  const { user, agencyData } = useAuth();
+  const { user } = useAuth();
   const { currentTheme } = useTheme();
   const { valuesHidden, toggleValuesVisibility } = usePrivacy();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,18 +22,12 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
   const mainTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'calculator', label: 'Calculadora', icon: Calculator },
+    { id: 'projetos', label: 'Projetos', icon: Kanban },
     { id: 'costs', label: 'Custos', icon: DollarSign },
     { id: 'items', label: 'Itens', icon: Briefcase },
     { id: 'routine', label: 'Rotina', icon: Clock }
   ];
 
-  // Menu empresa só aparece se o usuário faz parte de uma empresa
-  const companyTabs = [
-    { id: 'kanban', label: 'Projetos', icon: Kanban },
-    { id: 'team', label: 'Equipe', icon: Users }
-  ];
-
-  const isCompanyUser = (user?.userType === 'company_owner' || user?.userType === 'employee') && !!agencyData;
   const isAdmin = user?.userType === 'admin';
 
   const handleTabChange = (tab: string) => {
@@ -55,35 +49,6 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
               <span className={`font-bold text-xl bg-gradient-to-r ${currentTheme.primary} bg-clip-text text-transparent`}>
                 FinanceFlow
               </span>
-
-              {/* Company Menu - só aparece se usuário faz parte de empresa */}
-              {isCompanyUser && (
-                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                  <SheetTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Menu className="h-5 w-5 mr-2" />
-                      Empresa
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-64">
-                    <div className="space-y-4 py-4">
-                      <h3 className="font-semibold text-lg">Menu Empresa</h3>
-                      <p className="text-sm text-gray-600">{agencyData?.name || 'Sua Empresa'}</p>
-                      {companyTabs.map((tab) => (
-                        <Button
-                          key={tab.id}
-                          variant={activeTab === tab.id ? "default" : "ghost"}
-                          onClick={() => handleTabChange(tab.id)}
-                          className="w-full justify-start"
-                        >
-                          <tab.icon className="h-4 w-4 mr-2" />
-                          {tab.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </SheetContent>
-                </Sheet>
-              )}
 
               {/* Admin Menu */}
               {isAdmin && (
@@ -158,7 +123,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
       <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 md:hidden">
         <div className="flex justify-between items-center h-16 px-4">
           <div className="flex items-center space-x-3">
-            {(isCompanyUser || isAdmin) && (
+            {isAdmin && (
               <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="sm">
@@ -167,37 +132,15 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64">
                   <div className="space-y-4 py-4">
-                    {isCompanyUser && (
-                      <>
-                        <h3 className="font-semibold text-lg">Menu Empresa</h3>
-                        <p className="text-sm text-gray-600">{agencyData?.name || 'Sua Empresa'}</p>
-                        {companyTabs.map((tab) => (
-                          <Button
-                            key={tab.id}
-                            variant={activeTab === tab.id ? "default" : "ghost"}
-                            onClick={() => handleTabChange(tab.id)}
-                            className="w-full justify-start"
-                          >
-                            <tab.icon className="h-4 w-4 mr-2" />
-                            {tab.label}
-                          </Button>
-                        ))}
-                      </>
-                    )}
-                    
-                    {isAdmin && (
-                      <>
-                        <h3 className="font-semibold text-lg">Admin</h3>
-                        <Button
-                          variant={activeTab === 'admin' ? "default" : "ghost"}
-                          onClick={() => handleTabChange('admin')}
-                          className="w-full justify-start"
-                        >
-                          <SettingsIcon className="h-4 w-4 mr-2" />
-                          Painel Admin
-                        </Button>
-                      </>
-                    )}
+                    <h3 className="font-semibold text-lg">Admin</h3>
+                    <Button
+                      variant={activeTab === 'admin' ? "default" : "ghost"}
+                      onClick={() => handleTabChange('admin')}
+                      className="w-full justify-start"
+                    >
+                      <SettingsIcon className="h-4 w-4 mr-2" />
+                      Painel Admin
+                    </Button>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -238,7 +181,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 z-50">
-        <div className="grid grid-cols-5 h-16">
+        <div className="grid grid-cols-6 h-16">
           {mainTabs.map((tab) => (
             <Button
               key={tab.id}
