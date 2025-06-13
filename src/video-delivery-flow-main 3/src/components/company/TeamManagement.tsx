@@ -3,62 +3,52 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2 } from "lucide-react";
+import { Users, Plus, Trash2 } from "lucide-react";
 import { teamService } from '../../services/teamService';
 import { TeamMember } from '../../types/project';
 
 interface TeamManagementProps {
-  agencyId: string;
+  agencyId?: string;
 }
 
 const TeamManagement = ({ agencyId }: TeamManagementProps) => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    role: 'editor' as TeamMember['role']
-  });
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState<'admin' | 'editor' | 'viewer'>('viewer');
 
   useEffect(() => {
-    const loadTeamMembers = async () => {
-      if (agencyId) {
-        try {
-          const members = await teamService.getCompanyTeam(agencyId);
-          setTeamMembers(members);
-        } catch (error) {
-          console.error('Erro ao carregar equipe:', error);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-
     loadTeamMembers();
   }, [agencyId]);
 
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const loadTeamMembers = async () => {
+    if (!agencyId) return;
+    
     try {
-      const memberId = await teamService.addTeamMember({
-        ...formData,
+      const members = await teamService.getCompanyTeam(agencyId);
+      setTeamMembers(members);
+    } catch (error) {
+      console.error('Erro ao carregar equipe:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!newMemberEmail.trim() || !agencyId) return;
+    
+    try {
+      await teamService.addTeamMember({
+        name: newMemberEmail.split('@')[0],
+        email: newMemberEmail,
+        role: newMemberRole,
         agencyId
       });
       
-      const newMember: TeamMember = {
-        id: memberId,
-        ...formData,
-        agencyId,
-        createdAt: new Date().toISOString()
-      };
-      
-      setTeamMembers(prev => [newMember, ...prev]);
-      setFormData({ name: '', email: '', role: 'editor' });
-      setIsModalOpen(false);
+      setNewMemberEmail('');
+      setNewMemberRole('viewer');
+      await loadTeamMembers();
     } catch (error) {
       console.error('Erro ao adicionar membro:', error);
     }
@@ -67,7 +57,7 @@ const TeamManagement = ({ agencyId }: TeamManagementProps) => {
   const handleRemoveMember = async (memberId: string) => {
     try {
       await teamService.removeTeamMember(memberId);
-      setTeamMembers(prev => prev.filter(member => member.id !== memberId));
+      await loadTeamMembers();
     } catch (error) {
       console.error('Erro ao remover membro:', error);
     }
@@ -83,17 +73,42 @@ const TeamManagement = ({ agencyId }: TeamManagementProps) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Gestão de Equipe</h2>
-        <Button onClick={() => setIsModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Adicionar Membro
-        </Button>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Gerenciar Equipe
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Email do novo membro"
+              value={newMemberEmail}
+              onChange={(e) => setNewMemberEmail(e.target.value)}
+              className="flex-1"
+            />
+            <Select value={newMemberRole} onValueChange={(value: 'admin' | 'editor' | 'viewer') => setNewMemberRole(value)}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="viewer">Viewer</SelectItem>
+                <SelectItem value="editor">Editor</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={handleAddMember}>
+              <Plus className="w-4 h-4 mr-2" />
+              Adicionar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Membros da Equipe</CardTitle>
+          <CardTitle>Membros da Equipe ({teamMembers.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {teamMembers.length === 0 ? (
@@ -108,10 +123,10 @@ const TeamManagement = ({ agencyId }: TeamManagementProps) => {
                     <div className="font-medium">{member.name}</div>
                     <div className="text-sm text-gray-500">{member.email}</div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="text-sm font-medium capitalize">{member.role}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium capitalize">{member.role}</span>
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
                       onClick={() => handleRemoveMember(member.id)}
                     >
@@ -124,59 +139,6 @@ const TeamManagement = ({ agencyId }: TeamManagementProps) => {
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Adicionar Membro</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleAddMember} className="space-y-4">
-            <div>
-              <Label htmlFor="name">Nome</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                required
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                required
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="role">Função</Label>
-              <Select value={formData.role} onValueChange={(value: TeamMember['role']) => setFormData(prev => ({ ...prev, role: value }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="editor">Editor</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">
-                Adicionar
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

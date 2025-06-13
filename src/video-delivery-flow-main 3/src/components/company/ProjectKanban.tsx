@@ -9,7 +9,7 @@ import KanbanBoard from '../KanbanBoard';
 import ProjectModal from './ProjectModal';
 
 interface ProjectKanbanProps {
-  agencyId: string;
+  agencyId?: string;
 }
 
 const ProjectKanban = ({ agencyId }: ProjectKanbanProps) => {
@@ -18,58 +18,44 @@ const ProjectKanban = ({ agencyId }: ProjectKanbanProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const loadProjects = async () => {
-      if (agencyId) {
-        try {
-          const projectsData = await projectService.getCompanyProjects(agencyId);
-          setProjects(projectsData);
-        } catch (error) {
-          console.error('Erro ao carregar projetos:', error);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-
     loadProjects();
   }, [agencyId]);
 
-  const handleProjectMove = async (projectId: string, newStatus: Project['status']) => {
+  const loadProjects = async () => {
+    if (!agencyId) return;
+    
+    try {
+      const projectsData = await projectService.getProjects(agencyId);
+      setProjects(projectsData);
+    } catch (error) {
+      console.error('Erro ao carregar projetos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProjectMove = async (projectId: string, newStatus: "filmado" | "edicao" | "revisao" | "entregue") => {
     try {
       await projectService.updateProject(projectId, { status: newStatus });
-      setProjects(prev => 
-        prev.map(project => 
-          project.id === projectId 
-            ? { ...project, status: newStatus }
-            : project
-        )
-      );
+      await loadProjects();
     } catch (error) {
       console.error('Erro ao mover projeto:', error);
     }
   };
 
   const handleAddProject = async (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!agencyId) return;
+    
     try {
-      const projectId = await projectService.createProject({
+      await projectService.createProject({
         ...projectData,
         agencyId,
         status: 'filmado'
       });
-      
-      const newProject: Project = {
-        id: projectId,
-        ...projectData,
-        agencyId,
-        status: 'filmado',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      setProjects(prev => [newProject, ...prev]);
+      await loadProjects();
       setIsModalOpen(false);
     } catch (error) {
-      console.error('Erro ao adicionar projeto:', error);
+      console.error('Erro ao criar projeto:', error);
     }
   };
 
@@ -84,14 +70,14 @@ const ProjectKanban = ({ agencyId }: ProjectKanbanProps) => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Projetos</h2>
+        <h2 className="text-xl font-semibold">Kanban de Projetos</h2>
         <Button onClick={() => setIsModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Novo Projeto
         </Button>
       </div>
 
-      <KanbanBoard
+      <KanbanBoard 
         projects={projects}
         onProjectMove={handleProjectMove}
       />
