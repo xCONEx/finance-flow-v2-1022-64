@@ -108,11 +108,15 @@ export const firestoreService = {
 
   getAnalyticsData: async (): Promise<any> => {
     try {
-      const users = await this.getAllUsers();
-      const totalUsers = users?.length || 0;
-      const adminUsers = users?.filter(u => u?.userType === 'admin')?.length || 0;
-      const enterpriseUsers = users?.filter(u => u?.userType === 'enterprise')?.length || 0;
-      const individualUsers = users?.filter(u => u?.userType === 'individual')?.length || 0;
+      const users = await firestoreService.getAllUsers();
+      if (!users) {
+        return null;
+      }
+      
+      const totalUsers = users.length || 0;
+      const adminUsers = users.filter(u => u?.userType === 'admin')?.length || 0;
+      const enterpriseUsers = users.filter(u => u?.userType === 'enterprise')?.length || 0;
+      const individualUsers = users.filter(u => u?.userType === 'individual')?.length || 0;
 
       return {
         overview: {
@@ -174,7 +178,6 @@ export const firestoreService = {
     }
   },
 
-  // Monthly Costs
   getUserMonthlyCosts: async (userId: string): Promise<MonthlyCost[]> => {
     try {
       const q = query(
@@ -194,7 +197,6 @@ export const firestoreService = {
     }
   },
 
-  // Work Items
   getUserWorkItems: async (userId: string): Promise<WorkItem[]> => {
     try {
       const q = query(
@@ -214,7 +216,6 @@ export const firestoreService = {
     }
   },
 
-  // Work Routine
   getUserWorkRoutine: async (userId: string): Promise<WorkRoutine | null> => {
     try {
       const q = query(
@@ -238,7 +239,6 @@ export const firestoreService = {
     }
   },
 
-  // Tasks
   getUserTasks: async (userId: string): Promise<Task[]> => {
     try {
       const q = query(
