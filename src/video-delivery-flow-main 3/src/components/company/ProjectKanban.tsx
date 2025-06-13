@@ -25,7 +25,7 @@ const ProjectKanban = ({ agencyId }: ProjectKanbanProps) => {
     if (!agencyId) return;
     
     try {
-      const projectsData = await projectService.getProjects(agencyId);
+      const projectsData = await projectService.getCompanyProjects(agencyId);
       setProjects(projectsData);
     } catch (error) {
       console.error('Erro ao carregar projetos:', error);
