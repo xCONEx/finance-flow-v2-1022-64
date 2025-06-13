@@ -26,24 +26,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { useAgency } from '../hooks/useAgency';
-import { usePermissions } from '../hooks/usePermissions';
-
-// Definições de tipos para projetos audiovisuais
-interface Project {
-  id: string;
-  title: string;
-  client: string;
-  dueDate: string;
-  priority: "baixa" | "media" | "alta";
-  description?: string;
-  links?: string[];
-  status: "filmado" | "edicao" | "revisao" | "entregue";
-  createdAt: string;
-  updatedAt: string;
-  agencyId: string;
-  assignedTo?: string[];
-}
+import { projectService } from '../services/projectService';
+import { Project } from '../types/project';
 
 interface Column {
   title: string;
@@ -55,16 +39,6 @@ interface Column {
 
 interface KanbanBoard {
   [key: string]: Column;
-}
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  role: "admin" | "editor" | "viewer";
-  avatar?: string;
-  agencyId: string;
-  createdAt: string;
 }
 
 const ImprovedKanban = () => {
@@ -80,63 +54,26 @@ const ImprovedKanban = () => {
   });
   const [selectedColumn, setSelectedColumn] = useState('filmado');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [isEditingProject, setIsEditingProject] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
   const { user } = useAuth();
-  const { agencyData, isLoading: agencyLoading } = useAgency();
-  const permissions = usePermissions(agencyData?.userRole || 'viewer');
   const { toast } = useToast();
 
   useEffect(() => {
-    if (agencyData && user) {
-      loadTeamMembers();
+    if (user) {
       loadProjectData();
     } else {
       setIsLoading(false);
     }
-  }, [agencyData, user]);
-
-  const loadTeamMembers = async () => {
-    if (!agencyData?.id || agencyData.id === 'admin') return;
-    
-    try {
-      // Simular carregamento de membros da equipe
-      const mockMembers: TeamMember[] = [
-        {
-          id: user?.id || '1',
-          name: user?.name || 'Usuário',
-          email: user?.email || 'user@example.com',
-          role: agencyData?.userRole as any || 'editor',
-          agencyId: agencyData.id,
-          createdAt: new Date().toISOString()
-        }
-      ];
-      
-      setTeamMembers(mockMembers);
-    } catch (error) {
-      console.error('❌ Erro ao carregar equipe:', error);
-      if (user) {
-        setTeamMembers([{
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: agencyData?.userRole as any || 'editor',
-          agencyId: agencyData.id,
-          createdAt: new Date().toISOString()
-        }]);
-      }
-    }
-  };
+  }, [user]);
 
   const loadProjectData = async () => {
-    if (!agencyData) return;
+    if (!user) return;
 
     try {
-      console.log('📦 Carregando projetos para:', agencyData.id);
+      console.log('📦 Carregando projetos para usuário:', user.id);
       
       // Estrutura inicial do board para projetos audiovisuais
       const initialBoard: KanbanBoard = {
@@ -170,6 +107,24 @@ const ImprovedKanban = () => {
         }
       };
 
+      // Carregar projetos do Firebase
+      let projects: Project[] = [];
+      
+      if (user.userType === 'admin') {
+        projects = await projectService.getAllProjects();
+      } else if (user.userType === 'enterprise' && user.companyId) {
+        projects = await projectService.getCompanyProjects(user.companyId);
+      } else {
+        projects = await projectService.getUserProjects(user.id);
+      }
+
+      // Distribuir projetos pelas colunas
+      projects.forEach(project => {
+        if (initialBoard[project.status]) {
+          initialBoard[project.status].projects.push(project);
+        }
+      });
+
       setBoard(initialBoard);
     } catch (error) {
       console.error('❌ Erro ao carregar projetos:', error);
@@ -187,7 +142,7 @@ const ImprovedKanban = () => {
   };
 
   const handleDragEnd = async (result: any) => {
-    if (!result.destination || !permissions.canEditProjects) return;
+    if (!result.destination || !user) return;
 
     const { source, destination } = result;
     
@@ -218,10 +173,26 @@ const ImprovedKanban = () => {
 
       setBoard(newBoard);
       
-      toast({
-        title: "Projeto Movido",
-        description: `"${movedProject.title}" movido para ${destColumn.title}`
-      });
+      // Atualizar no Firebase
+      try {
+        await projectService.updateProject(movedProject.id, {
+          status: movedProject.status
+        });
+        
+        toast({
+          title: "Projeto Movido",
+          description: `"${movedProject.title}" movido para ${destColumn.title}`
+        });
+      } catch (error) {
+        console.error('❌ Erro ao atualizar projeto:', error);
+        // Reverter mudança em caso de erro
+        loadProjectData();
+        toast({
+          title: "Erro",
+          description: "Erro ao mover projeto",
+          variant: "destructive"
+        });
+      }
     } else {
       // Reordenar na mesma coluna
       const column = board[source.droppableId];
@@ -242,7 +213,7 @@ const ImprovedKanban = () => {
   };
 
   const handleAddProject = async () => {
-    if (!newProject.title || !newProject.client || !permissions.canEditProjects) {
+    if (!newProject.title || !newProject.client || !user) {
       toast({
         title: "Erro",
         description: "Preencha pelo menos o título e nome do cliente",
@@ -252,8 +223,7 @@ const ImprovedKanban = () => {
     }
 
     try {
-      const project: Project = {
-        id: `project_${Date.now()}`,
+      const projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'> = {
         title: newProject.title!,
         description: newProject.description || '',
         client: newProject.client!,
@@ -262,20 +232,14 @@ const ImprovedKanban = () => {
         assignedTo: newProject.assignedTo || [],
         links: newProject.links || [],
         status: selectedColumn as Project['status'],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        agencyId: agencyData?.id || ''
+        userId: user.id,
+        companyId: user.companyId || undefined
       };
 
-      const updatedBoard = {
-        ...board,
-        [selectedColumn]: {
-          ...board[selectedColumn],
-          projects: [...board[selectedColumn].projects, project]
-        }
-      };
+      const projectId = await projectService.createProject(projectData);
 
-      setBoard(updatedBoard);
+      // Recarregar projetos
+      await loadProjectData();
 
       // Limpar formulário
       setNewProject({
@@ -291,7 +255,7 @@ const ImprovedKanban = () => {
 
       toast({
         title: "Projeto Criado",
-        description: `"${project.title}" foi adicionado com sucesso`
+        description: `"${projectData.title}" foi adicionado com sucesso`
       });
     } catch (error) {
       console.error('❌ Erro ao criar projeto:', error);
@@ -341,25 +305,7 @@ const ImprovedKanban = () => {
     );
   };
 
-  // Verificar se o usuário faz parte de uma empresa
-  if (!agencyData) {
-    return (
-      <div className="text-center py-16">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
-          <Video className="h-16 w-16 mx-auto text-yellow-600 mb-4" />
-          <h3 className="text-lg font-semibold text-yellow-800 mb-2">
-            Acesso Restrito
-          </h3>
-          <p className="text-yellow-700">
-            O Kanban de Projetos é exclusivo para membros de empresas. 
-            Entre em contato com um administrador para ser adicionado a uma empresa.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading || agencyLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
@@ -380,8 +326,10 @@ const ImprovedKanban = () => {
             Gestão de Projetos Audiovisuais
           </h2>
           <p className="text-gray-600">
-            {agencyData.name} - Organize seus projetos de filmagem e edição
-            {!permissions.canEditProjects && <span className="text-orange-600 ml-2">(Somente visualização)</span>}
+            {user?.userType === 'enterprise' && user?.companyName 
+              ? `${user.companyName} - Organize seus projetos de filmagem e edição`
+              : 'Organize seus projetos de filmagem e edição'
+            }
           </p>
         </div>
 
@@ -398,115 +346,113 @@ const ImprovedKanban = () => {
           </div>
 
           {/* Botão de novo projeto */}
-          {permissions.canEditProjects && (
-            <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-              <DialogTrigger asChild>
-                <Button className="bg-purple-600 hover:bg-purple-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Novo Projeto
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Criar Novo Projeto</DialogTitle>
-                  <DialogDescription>
-                    Preencha as informações do projeto audiovisual
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <label className="text-sm font-medium mb-2 block">Título do Projeto *</label>
-                      <Input
-                        placeholder="Ex: Casamento João e Maria"
-                        value={newProject.title || ''}
-                        onChange={(e) => setNewProject({...newProject, title: e.target.value})}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Cliente *</label>
-                      <Input
-                        placeholder="Nome do cliente"
-                        value={newProject.client || ''}
-                        onChange={(e) => setNewProject({...newProject, client: e.target.value})}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Prazo de Entrega</label>
-                      <Input
-                        type="date"
-                        value={newProject.dueDate || ''}
-                        onChange={(e) => setNewProject({...newProject, dueDate: e.target.value})}
-                      />
-                    </div>
+          <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+            <DialogTrigger asChild>
+              <Button className="bg-purple-600 hover:bg-purple-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Projeto
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Criar Novo Projeto</DialogTitle>
+                <DialogDescription>
+                  Preencha as informações do projeto audiovisual
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-sm font-medium mb-2 block">Título do Projeto *</label>
+                    <Input
+                      placeholder="Ex: Casamento João e Maria"
+                      value={newProject.title || ''}
+                      onChange={(e) => setNewProject({...newProject, title: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Cliente *</label>
+                    <Input
+                      placeholder="Nome do cliente"
+                      value={newProject.client || ''}
+                      onChange={(e) => setNewProject({...newProject, client: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Prazo de Entrega</label>
+                    <Input
+                      type="date"
+                      value={newProject.dueDate || ''}
+                      onChange={(e) => setNewProject({...newProject, dueDate: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Descrição</label>
+                  <Textarea
+                    placeholder="Detalhes sobre o projeto..."
+                    value={newProject.description || ''}
+                    onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Prioridade</label>
+                    <Select 
+                      value={newProject.priority || 'media'} 
+                      onValueChange={(value: 'alta' | 'media' | 'baixa') => setNewProject({...newProject, priority: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="alta">Alta</SelectItem>
+                        <SelectItem value="media">Média</SelectItem>
+                        <SelectItem value="baixa">Baixa</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Descrição</label>
-                    <Textarea
-                      placeholder="Detalhes sobre o projeto..."
-                      value={newProject.description || ''}
-                      onChange={(e) => setNewProject({...newProject, description: e.target.value})}
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Prioridade</label>
-                      <Select 
-                        value={newProject.priority || 'media'} 
-                        onValueChange={(value: 'alta' | 'media' | 'baixa') => setNewProject({...newProject, priority: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="alta">Alta</SelectItem>
-                          <SelectItem value="media">Média</SelectItem>
-                          <SelectItem value="baixa">Baixa</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Status Inicial</label>
-                      <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="filmado">Filmado</SelectItem>
-                          <SelectItem value="edicao">Em Edição</SelectItem>
-                          <SelectItem value="revisao">Revisão</SelectItem>
-                          <SelectItem value="entregue">Entregue</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <label className="text-sm font-medium mb-2 block">Status Inicial</label>
+                    <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="filmado">Filmado</SelectItem>
+                        <SelectItem value="edicao">Em Edição</SelectItem>
+                        <SelectItem value="revisao">Revisão</SelectItem>
+                        <SelectItem value="entregue">Entregue</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={handleAddProject} className="flex-1">
-                    Criar Projeto
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowAddModal(false)}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
+              <div className="flex gap-2 pt-4">
+                <Button onClick={handleAddProject} className="flex-1">
+                  Criar Projeto
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAddModal(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Kanban Board */}
-      <DragDropContext onDragEnd={permissions.canEditProjects ? handleDragEnd : () => {}}>
+      <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid lg:grid-cols-4 gap-6">
           {fixedColumnOrder.map((columnId) => {
             const column = board[columnId];
@@ -528,7 +474,7 @@ const ImprovedKanban = () => {
                   <p className="text-xs text-center text-gray-600">{column.description}</p>
                 </CardHeader>
                 <CardContent>
-                  <Droppable droppableId={columnId} isDropDisabled={!permissions.canEditProjects}>
+                  <Droppable droppableId={columnId}>
                     {(provided, snapshot) => (
                       <div
                         {...provided.droppableProps}
@@ -542,7 +488,6 @@ const ImprovedKanban = () => {
                             key={project.id} 
                             draggableId={project.id} 
                             index={index}
-                            isDragDisabled={!permissions.canEditProjects}
                           >
                             {(provided, snapshot) => (
                               <div
@@ -634,17 +579,6 @@ const ImprovedKanban = () => {
                 <Video className="h-5 w-5" />
                 {selectedProject?.title}
               </span>
-              {permissions.canEditProjects && (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsEditingProject(!isEditingProject)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
             </DialogTitle>
           </DialogHeader>
           

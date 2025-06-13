@@ -38,12 +38,13 @@ export const projectService = {
     return this.addProject(projectData);
   },
 
-  // Buscar projetos da empresa
-  async getCompanyProjects(agencyId: string) {
+  // Buscar projetos do usuário individual
+  async getUserProjects(userId: string) {
     try {
       const q = query(
         collection(db, COLLECTION_NAME),
-        where('agencyId', '==', agencyId),
+        where('userId', '==', userId),
+        where('companyId', '==', null),
         orderBy('createdAt', 'desc')
       );
       const querySnapshot = await getDocs(q);
@@ -54,7 +55,48 @@ export const projectService = {
         updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || ''
       })) as Project[];
     } catch (error) {
-      console.error('Erro ao buscar projetos:', error);
+      console.error('Erro ao buscar projetos do usuário:', error);
+      throw error;
+    }
+  },
+
+  // Buscar projetos da empresa
+  async getCompanyProjects(companyId: string) {
+    try {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where('companyId', '==', companyId),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate()?.toISOString() || '',
+        updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || ''
+      })) as Project[];
+    } catch (error) {
+      console.error('Erro ao buscar projetos da empresa:', error);
+      throw error;
+    }
+  },
+
+  // Buscar todos os projetos (para admins)
+  async getAllProjects() {
+    try {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate()?.toISOString() || '',
+        updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || ''
+      })) as Project[];
+    } catch (error) {
+      console.error('Erro ao buscar todos os projetos:', error);
       throw error;
     }
   },
@@ -83,11 +125,31 @@ export const projectService = {
     }
   },
 
-  // Escutar mudanças em tempo real
-  subscribeToCompanyProjects(agencyId: string, callback: (projects: Project[]) => void) {
+  // Escutar mudanças em tempo real - usuário individual
+  subscribeToUserProjects(userId: string, callback: (projects: Project[]) => void) {
     const q = query(
       collection(db, COLLECTION_NAME),
-      where('agencyId', '==', agencyId),
+      where('userId', '==', userId),
+      where('companyId', '==', null),
+      orderBy('createdAt', 'desc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const projects = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate()?.toISOString() || '',
+        updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || ''
+      })) as Project[];
+      callback(projects);
+    });
+  },
+
+  // Escutar mudanças em tempo real - empresa
+  subscribeToCompanyProjects(companyId: string, callback: (projects: Project[]) => void) {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('companyId', '==', companyId),
       orderBy('createdAt', 'desc')
     );
     

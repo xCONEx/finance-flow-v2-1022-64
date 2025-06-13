@@ -5,8 +5,9 @@ export interface User {
   name: string;
   avatar?: string;
   photoURL?: string;
-  userType: 'admin' | 'company_owner' | 'employee' | 'individual';
+  userType: 'admin' | 'enterprise' | 'individual';
   companyId?: string;
+  companyName?: string;
   createdAt: string;
 }
 
@@ -14,7 +15,7 @@ export interface Company {
   id: string;
   name: string;
   logo?: string;
-  plan: 'free' | 'premium';
+  plan: 'free' | 'enterprise';
   ownerId: string;
   createdAt: string;
 }

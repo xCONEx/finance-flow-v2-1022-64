@@ -10,7 +10,8 @@ export interface Project {
   status: "filmado" | "edicao" | "revisao" | "entregue";
   createdAt: string;
   updatedAt: string;
-  agencyId: string;
+  companyId?: string;
+  userId: string;
   assignedTo?: string[];
 }
 
@@ -18,8 +19,8 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "editor" | "viewer";
+  role: "admin" | "member";
   avatar?: string;
-  agencyId: string;
+  companyId: string;
   createdAt: string;
 }
