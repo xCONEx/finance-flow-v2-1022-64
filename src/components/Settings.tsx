@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Settings as SettingsIcon, Palette, Shield, Globe, Bell } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,12 +13,18 @@ import { toast } from '@/hooks/use-toast';
 
 const Settings = () => {
   const { user } = useAuth();
-  const { themes, currentTheme, changeTheme } = useTheme();
-  const { isPrivacyEnabled, togglePrivacy } = usePrivacy();
+  const { currentTheme, changeTheme } = useTheme();
+  const { valuesHidden, toggleValuesVisibility } = usePrivacy();
   const [notifications, setNotifications] = useState(true);
 
   // Check if user is in a company
   const isInCompany = user?.userType === 'enterprise' && !!user.companyId;
+
+  const availableThemes = [
+    { name: 'Roxo & Azul', value: 'purple-blue' },
+    { name: 'Verde & Azul', value: 'green-blue' },
+    { name: 'Laranja & Vermelho', value: 'orange-red' }
+  ];
 
   const handleThemeChange = (themeName: string) => {
     changeTheme(themeName);
@@ -28,10 +35,10 @@ const Settings = () => {
   };
 
   const handlePrivacyToggle = () => {
-    togglePrivacy();
+    toggleValuesVisibility();
     toast({
-      title: isPrivacyEnabled ? "Privacidade Desabilitada" : "Privacidade Habilitada",
-      description: isPrivacyEnabled 
+      title: valuesHidden ? "Privacidade Desabilitada" : "Privacidade Habilitada",
+      description: valuesHidden 
         ? "Os valores agora serão exibidos normalmente."
         : "Os valores agora serão mascarados para privacidade.",
     });
@@ -72,8 +79,8 @@ const Settings = () => {
                 <SelectValue placeholder="Selecione um tema" />
               </SelectTrigger>
               <SelectContent className="bg-white border shadow-lg z-50">
-                {themes.map((theme) => (
-                  <SelectItem key={theme.name} value={theme.name}>
+                {availableThemes.map((theme) => (
+                  <SelectItem key={theme.value} value={theme.value}>
                     {theme.name}
                   </SelectItem>
                 ))}
@@ -93,7 +100,7 @@ const Settings = () => {
         <CardContent>
           <div className="flex items-center justify-between">
             <Label htmlFor="privacy">Mascarar valores</Label>
-            <Switch id="privacy" checked={isPrivacyEnabled} onCheckedChange={handlePrivacyToggle} />
+            <Switch id="privacy" checked={valuesHidden} onCheckedChange={handlePrivacyToggle} />
           </div>
         </CardContent>
       </Card>

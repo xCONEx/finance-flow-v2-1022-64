@@ -109,10 +109,10 @@ export const firestoreService = {
   getAnalyticsData: async (): Promise<any> => {
     try {
       const users = await this.getAllUsers();
-      const totalUsers = users.length;
-      const adminUsers = users.filter(u => u.userType === 'admin').length;
-      const enterpriseUsers = users.filter(u => u.userType === 'enterprise').length;
-      const individualUsers = users.filter(u => u.userType === 'individual').length;
+      const totalUsers = users?.length || 0;
+      const adminUsers = users?.filter(u => u.userType === 'admin')?.length || 0;
+      const enterpriseUsers = users?.filter(u => u.userType === 'enterprise')?.length || 0;
+      const individualUsers = users?.filter(u => u.userType === 'individual')?.length || 0;
 
       return {
         overview: {
