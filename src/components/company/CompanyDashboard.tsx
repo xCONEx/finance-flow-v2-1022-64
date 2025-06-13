@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Plus, Settings, BarChart3 } from "lucide-react";
-import { teamService } from '../services/teamService';
-import { TeamMember } from '../types/project';
+import { teamService } from '../../services/teamService';
+import { TeamMember } from '../../types/project';
 
 interface CompanyDashboardProps {
   agencyId?: string;
