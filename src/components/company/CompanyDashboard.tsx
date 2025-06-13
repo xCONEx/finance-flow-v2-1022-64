@@ -3,9 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Plus, Settings, BarChart3 } from "lucide-react";
-import { teamService } from '../../services/teamService';
-import { TeamMember } from '../../types/project';
-import { useAuth } from '../../contexts/AuthContext';
+import { teamService } from '../services/teamService';
+import { TeamMember } from '../types/project';
 
 interface CompanyDashboardProps {
   agencyId?: string;
@@ -15,15 +14,12 @@ interface CompanyDashboardProps {
 const CompanyDashboard = ({ agencyId, companyName }: CompanyDashboardProps) => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const { agencyData } = useAuth();
-
-  const currentAgencyId = agencyId || agencyData?.id;
 
   useEffect(() => {
     const loadTeamMembers = async () => {
-      if (currentAgencyId) {
+      if (agencyId) {
         try {
-          const members = await teamService.getCompanyTeam(currentAgencyId);
+          const members = await teamService.getCompanyTeam(agencyId);
           setTeamMembers(members);
         } catch (error) {
           console.error('Erro ao carregar equipe:', error);
@@ -34,7 +30,7 @@ const CompanyDashboard = ({ agencyId, companyName }: CompanyDashboardProps) => {
     };
 
     loadTeamMembers();
-  }, [currentAgencyId]);
+  }, [agencyId]);
 
   if (loading) {
     return (
