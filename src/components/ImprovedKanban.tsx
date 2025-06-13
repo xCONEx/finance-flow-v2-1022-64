@@ -16,95 +16,75 @@ import {
   Plus, 
   Edit, 
   Trash2,
-  Link,
-  Upload,
-  Eye,
-  CheckCircle,
-  AlertTriangle,
-  Play,
-  Scissors,
   Search,
   FileVideo,
-  ExternalLink
+  ExternalLink,
+  AlertTriangle,
+  CheckCircle,
+  Eye,
+  Scissors
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { firestoreService } from '../services/firestore';
-import { usePermissions } from '../hooks/usePermissions';
 import { useAgency } from '../hooks/useAgency';
+import { usePermissions } from '../hooks/usePermissions';
 
-// Definições de tipos específicas para projetos audiovisuais
-interface VideoProject {
+// Definições de tipos para projetos audiovisuais
+interface Project {
   id: string;
   title: string;
-  description: string;
-  clientName: string;
-  deadline: string;
-  priority: 'alta' | 'média' | 'baixa';
-  projectType: 'Casamento' | 'Evento Corporativo' | 'Comercial' | 'Documentário' | 'Social Media' | 'Outro';
-  estimatedDuration: string; // Ex: "5 minutos"
-  deliveryLinks: DeliveryLink[];
+  client: string;
+  dueDate: string;
+  priority: "baixa" | "media" | "alta";
+  description?: string;
+  links?: string[];
+  status: "filmado" | "edicao" | "revisao" | "entregue";
   createdAt: string;
-  assignedTo: string;
-  notes: string;
-  status: 'filmado' | 'edicao' | 'revisao' | 'entregue';
+  updatedAt: string;
+  agencyId: string;
+  assignedTo?: string[];
 }
 
-interface DeliveryLink {
-  id: string;
-  url: string;
-  platform: 'WeTransfer' | 'Google Drive' | 'Dropbox' | 'YouTube' | 'Vimeo' | 'Outro';
-  description: string;
-  uploadedAt: string;
-  isPublic: boolean; // Se o cliente pode ver
-}
-
-interface ProjectColumn {
+interface Column {
   title: string;
   color: string;
   icon: React.ComponentType<any>;
   description: string;
-  projects: VideoProject[];
+  projects: Project[];
 }
 
-interface ProjectBoard {
-  [key: string]: ProjectColumn;
+interface KanbanBoard {
+  [key: string]: Column;
 }
 
 interface TeamMember {
-  uid: string;
-  email: string;
+  id: string;
   name: string;
-  role: string;
+  email: string;
+  role: "admin" | "editor" | "viewer";
+  avatar?: string;
+  agencyId: string;
+  createdAt: string;
 }
 
 const ImprovedKanban = () => {
-  const [board, setBoard] = useState<ProjectBoard>({});
-  const [newProject, setNewProject] = useState<Partial<VideoProject>>({
+  const [board, setBoard] = useState<KanbanBoard>({});
+  const [newProject, setNewProject] = useState<Partial<Project>>({
     title: '',
     description: '',
-    clientName: '',
-    deadline: '',
-    priority: 'média',
-    projectType: 'Comercial',
-    estimatedDuration: '',
-    assignedTo: '',
-    notes: '',
-    deliveryLinks: []
+    client: '',
+    dueDate: '',
+    priority: 'media',
+    assignedTo: [],
+    links: []
   });
   const [selectedColumn, setSelectedColumn] = useState('filmado');
-  const [selectedProject, setSelectedProject] = useState<VideoProject | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isEditingProject, setIsEditingProject] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newDeliveryLink, setNewDeliveryLink] = useState({
-    url: '',
-    platform: 'WeTransfer' as const,
-    description: '',
-    isPublic: false
-  });
 
   const { user } = useAuth();
   const { agencyData, isLoading: agencyLoading } = useAgency();
@@ -124,23 +104,29 @@ const ImprovedKanban = () => {
     if (!agencyData?.id || agencyData.id === 'admin') return;
     
     try {
-      const members = await firestoreService.getAgenciaMembers(agencyData.id);
-      const formattedMembers: TeamMember[] = members.map(member => ({
-        uid: member.uid,
-        email: member.email || 'Email não disponível',
-        name: member.name || member.email?.split('@')[0] || 'Nome não disponível',
-        role: member.role
-      }));
+      // Simular carregamento de membros da equipe
+      const mockMembers: TeamMember[] = [
+        {
+          id: user?.id || '1',
+          name: user?.name || 'Usuário',
+          email: user?.email || 'user@example.com',
+          role: agencyData?.userRole as any || 'editor',
+          agencyId: agencyData.id,
+          createdAt: new Date().toISOString()
+        }
+      ];
       
-      setTeamMembers(formattedMembers);
+      setTeamMembers(mockMembers);
     } catch (error) {
       console.error('❌ Erro ao carregar equipe:', error);
       if (user) {
         setTeamMembers([{
-          uid: user.id,
-          email: user.email,
+          id: user.id,
           name: user.name,
-          role: agencyData?.userRole || 'editor'
+          email: user.email,
+          role: agencyData?.userRole as any || 'editor',
+          agencyId: agencyData.id,
+          createdAt: new Date().toISOString()
         }]);
       }
     }
@@ -152,57 +138,42 @@ const ImprovedKanban = () => {
     try {
       console.log('📦 Carregando projetos para:', agencyData.id);
       
-      const existingBoard = await firestoreService.getKanbanBoard(agencyData.id);
-      
-      if (existingBoard && existingBoard.columns) {
-        setBoard(existingBoard.columns);
-      } else {
-        // Criar board inicial com colunas específicas para projetos audiovisuais
-        const initialBoard: ProjectBoard = {
-          'filmado': {
-            title: 'Filmado',
-            color: 'bg-blue-50 border-blue-200',
-            icon: Video,
-            description: 'Material gravado, aguardando edição',
-            projects: []
-          },
-          'edicao': {
-            title: 'Em Edição',
-            color: 'bg-orange-50 border-orange-200',
-            icon: Scissors,
-            description: 'Projeto sendo editado',
-            projects: []
-          },
-          'revisao': {
-            title: 'Revisão',
-            color: 'bg-yellow-50 border-yellow-200',
-            icon: Eye,
-            description: 'Aguardando aprovação do cliente',
-            projects: []
-          },
-          'entregue': {
-            title: 'Entregue',
-            color: 'bg-green-50 border-green-200',
-            icon: CheckCircle,
-            description: 'Projeto finalizado e entregue',
-            projects: []
-          }
-        };
-
-        setBoard(initialBoard);
-        
-        if (permissions.canEditProjects) {
-          try {
-            await saveProjectState(initialBoard);
-          } catch (saveError) {
-            console.warn('⚠️ Não foi possível salvar board inicial:', saveError);
-          }
+      // Estrutura inicial do board para projetos audiovisuais
+      const initialBoard: KanbanBoard = {
+        'filmado': {
+          title: 'Filmado',
+          color: 'bg-blue-50 border-blue-200',
+          icon: Video,
+          description: 'Material gravado, aguardando edição',
+          projects: []
+        },
+        'edicao': {
+          title: 'Em Edição',
+          color: 'bg-orange-50 border-orange-200',
+          icon: Scissors,
+          description: 'Projeto sendo editado',
+          projects: []
+        },
+        'revisao': {
+          title: 'Revisão',
+          color: 'bg-yellow-50 border-yellow-200',
+          icon: Eye,
+          description: 'Aguardando aprovação do cliente',
+          projects: []
+        },
+        'entregue': {
+          title: 'Entregue',
+          color: 'bg-green-50 border-green-200',
+          icon: CheckCircle,
+          description: 'Projeto finalizado e entregue',
+          projects: []
         }
-      }
+      };
+
+      setBoard(initialBoard);
     } catch (error) {
       console.error('❌ Erro ao carregar projetos:', error);
-      // Board local como fallback
-      const fallbackBoard: ProjectBoard = {
+      const fallbackBoard: KanbanBoard = {
         'filmado': { title: 'Filmado', color: 'bg-blue-50 border-blue-200', icon: Video, description: 'Material gravado', projects: [] },
         'edicao': { title: 'Em Edição', color: 'bg-orange-50 border-orange-200', icon: Scissors, description: 'Sendo editado', projects: [] },
         'revisao': { title: 'Revisão', color: 'bg-yellow-50 border-yellow-200', icon: Eye, description: 'Aguardando aprovação', projects: [] },
@@ -212,40 +183,6 @@ const ImprovedKanban = () => {
       setBoard(fallbackBoard);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const saveProjectState = async (boardData: ProjectBoard) => {
-    if (!agencyData || !permissions.canEditProjects) {
-      console.log('⚠️ Sem permissão para salvar ou agência não encontrada');
-      return;
-    }
-
-    try {
-      const projectData = {
-        columns: boardData,
-        updatedAt: new Date().toISOString(),
-        updatedBy: user?.id
-      };
-      
-      await firestoreService.saveKanbanBoard(agencyData.id, projectData);
-      console.log('✅ Projetos salvos com sucesso');
-    } catch (error) {
-      console.error('❌ Erro ao salvar projetos:', error);
-      
-      if (error.code === 'permission-denied') {
-        toast({
-          title: "Aviso de Permissão",
-          description: "Você não tem permissão para salvar alterações. Suas mudanças são apenas locais.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Erro ao Salvar",
-          description: "Não foi possível salvar as alterações. Tente novamente.",
-          variant: "destructive"
-        });
-      }
     }
   };
 
@@ -262,7 +199,8 @@ const ImprovedKanban = () => {
       const [movedProject] = sourceProjects.splice(source.index, 1);
       
       // Atualizar status do projeto
-      movedProject.status = destination.droppableId as VideoProject['status'];
+      movedProject.status = destination.droppableId as Project['status'];
+      movedProject.updatedAt = new Date().toISOString();
       
       destProjects.splice(destination.index, 0, movedProject);
       
@@ -279,7 +217,6 @@ const ImprovedKanban = () => {
       };
 
       setBoard(newBoard);
-      await saveProjectState(newBoard);
       
       toast({
         title: "Projeto Movido",
@@ -301,12 +238,11 @@ const ImprovedKanban = () => {
       };
 
       setBoard(newBoard);
-      await saveProjectState(newBoard);
     }
   };
 
   const handleAddProject = async () => {
-    if (!newProject.title || !newProject.clientName || !permissions.canEditProjects) {
+    if (!newProject.title || !newProject.client || !permissions.canEditProjects) {
       toast({
         title: "Erro",
         description: "Preencha pelo menos o título e nome do cliente",
@@ -316,20 +252,19 @@ const ImprovedKanban = () => {
     }
 
     try {
-      const project: VideoProject = {
+      const project: Project = {
         id: `project_${Date.now()}`,
         title: newProject.title!,
         description: newProject.description || '',
-        clientName: newProject.clientName!,
-        deadline: newProject.deadline || '',
-        priority: newProject.priority || 'média',
-        projectType: newProject.projectType || 'Comercial',
-        estimatedDuration: newProject.estimatedDuration || '',
-        assignedTo: newProject.assignedTo || user?.name || 'Não atribuído',
-        notes: newProject.notes || '',
-        deliveryLinks: [],
+        client: newProject.client!,
+        dueDate: newProject.dueDate || '',
+        priority: newProject.priority || 'media',
+        assignedTo: newProject.assignedTo || [],
+        links: newProject.links || [],
+        status: selectedColumn as Project['status'],
         createdAt: new Date().toISOString(),
-        status: selectedColumn as VideoProject['status']
+        updatedAt: new Date().toISOString(),
+        agencyId: agencyData?.id || ''
       };
 
       const updatedBoard = {
@@ -341,20 +276,16 @@ const ImprovedKanban = () => {
       };
 
       setBoard(updatedBoard);
-      await saveProjectState(updatedBoard);
 
       // Limpar formulário
       setNewProject({
         title: '',
         description: '',
-        clientName: '',
-        deadline: '',
-        priority: 'média',
-        projectType: 'Comercial',
-        estimatedDuration: '',
-        assignedTo: '',
-        notes: '',
-        deliveryLinks: []
+        client: '',
+        dueDate: '',
+        priority: 'media',
+        assignedTo: [],
+        links: []
       });
       setShowAddModal(false);
 
@@ -372,70 +303,13 @@ const ImprovedKanban = () => {
     }
   };
 
-  const handleAddDeliveryLink = () => {
-    if (!selectedProject || !newDeliveryLink.url) return;
-
-    const link: DeliveryLink = {
-      id: `link_${Date.now()}`,
-      url: newDeliveryLink.url,
-      platform: newDeliveryLink.platform,
-      description: newDeliveryLink.description,
-      uploadedAt: new Date().toISOString(),
-      isPublic: newDeliveryLink.isPublic
-    };
-
-    const updatedProject = {
-      ...selectedProject,
-      deliveryLinks: [...selectedProject.deliveryLinks, link]
-    };
-
-    setSelectedProject(updatedProject);
-    
-    // Atualizar no board
-    const updatedBoard = { ...board };
-    Object.keys(updatedBoard).forEach(columnId => {
-      const projectIndex = updatedBoard[columnId].projects.findIndex(p => p.id === selectedProject.id);
-      if (projectIndex !== -1) {
-        updatedBoard[columnId].projects[projectIndex] = updatedProject;
-      }
-    });
-
-    setBoard(updatedBoard);
-    saveProjectState(updatedBoard);
-
-    // Limpar formulário
-    setNewDeliveryLink({
-      url: '',
-      platform: 'WeTransfer',
-      description: '',
-      isPublic: false
-    });
-
-    toast({
-      title: "Link Adicionado",
-      description: "Link de entrega adicionado com sucesso"
-    });
-  };
-
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'alta': return 'bg-red-100 text-red-800 border-red-200';
-      case 'média': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'media': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'baixa': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
-  };
-
-  const getProjectTypeColor = (type: string) => {
-    const colors = {
-      'Casamento': 'bg-pink-100 text-pink-800',
-      'Evento Corporativo': 'bg-blue-100 text-blue-800',
-      'Comercial': 'bg-purple-100 text-purple-800',
-      'Documentário': 'bg-indigo-100 text-indigo-800',
-      'Social Media': 'bg-green-100 text-green-800',
-      'Outro': 'bg-gray-100 text-gray-800'
-    };
-    return colors[type as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
 
   const isDeadlineNear = (deadline: string) => {
@@ -444,7 +318,7 @@ const ImprovedKanban = () => {
     const today = new Date();
     const diffTime = deadlineDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays <= 3 && diffDays >= 0; // Próximos 3 dias
+    return diffDays <= 3 && diffDays >= 0;
   };
 
   const isOverdue = (deadline: string) => {
@@ -458,12 +332,12 @@ const ImprovedKanban = () => {
   const fixedColumnOrder = ['filmado', 'edicao', 'revisao', 'entregue'];
 
   // Filtrar projetos por busca
-  const filterProjects = (projects: VideoProject[]) => {
+  const filterProjects = (projects: Project[]) => {
     if (!searchTerm) return projects;
     return projects.filter(project =>
       project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchTerm.toLowerCase())
+      project.client.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.description?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
 
@@ -554,8 +428,8 @@ const ImprovedKanban = () => {
                       <label className="text-sm font-medium mb-2 block">Cliente *</label>
                       <Input
                         placeholder="Nome do cliente"
-                        value={newProject.clientName || ''}
-                        onChange={(e) => setNewProject({...newProject, clientName: e.target.value})}
+                        value={newProject.client || ''}
+                        onChange={(e) => setNewProject({...newProject, client: e.target.value})}
                       />
                     </div>
                     
@@ -563,8 +437,8 @@ const ImprovedKanban = () => {
                       <label className="text-sm font-medium mb-2 block">Prazo de Entrega</label>
                       <Input
                         type="date"
-                        value={newProject.deadline || ''}
-                        onChange={(e) => setNewProject({...newProject, deadline: e.target.value})}
+                        value={newProject.dueDate || ''}
+                        onChange={(e) => setNewProject({...newProject, dueDate: e.target.value})}
                       />
                     </div>
                   </div>
@@ -579,70 +453,20 @@ const ImprovedKanban = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Tipo de Projeto</label>
-                      <Select 
-                        value={newProject.projectType || 'Comercial'} 
-                        onValueChange={(value) => setNewProject({...newProject, projectType: value as VideoProject['projectType']})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Casamento">Casamento</SelectItem>
-                          <SelectItem value="Evento Corporativo">Evento Corporativo</SelectItem>
-                          <SelectItem value="Comercial">Comercial</SelectItem>
-                          <SelectItem value="Documentário">Documentário</SelectItem>
-                          <SelectItem value="Social Media">Social Media</SelectItem>
-                          <SelectItem value="Outro">Outro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium mb-2 block">Prioridade</label>
                       <Select 
-                        value={newProject.priority || 'média'} 
-                        onValueChange={(value: 'alta' | 'média' | 'baixa') => setNewProject({...newProject, priority: value})}
+                        value={newProject.priority || 'media'} 
+                        onValueChange={(value: 'alta' | 'media' | 'baixa') => setNewProject({...newProject, priority: value})}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="alta">Alta</SelectItem>
-                          <SelectItem value="média">Média</SelectItem>
+                          <SelectItem value="media">Média</SelectItem>
                           <SelectItem value="baixa">Baixa</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Duração Estimada</label>
-                      <Input
-                        placeholder="Ex: 5 minutos"
-                        value={newProject.estimatedDuration || ''}
-                        onChange={(e) => setNewProject({...newProject, estimatedDuration: e.target.value})}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Responsável</label>
-                      <Select
-                        value={newProject.assignedTo || ''}
-                        onValueChange={(value) => setNewProject({...newProject, assignedTo: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecionar editor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {teamMembers.map((member) => (
-                            <SelectItem key={member.uid} value={member.name}>
-                              {member.name}
-                            </SelectItem>
-                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -661,16 +485,6 @@ const ImprovedKanban = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Observações</label>
-                    <Textarea
-                      placeholder="Notas adicionais..."
-                      value={newProject.notes || ''}
-                      onChange={(e) => setNewProject({...newProject, notes: e.target.value})}
-                      rows={2}
-                    />
                   </div>
                 </div>
 
@@ -748,10 +562,10 @@ const ImprovedKanban = () => {
                                       <div className="flex justify-between items-start">
                                         <h4 className="font-semibold text-sm line-clamp-2">{project.title}</h4>
                                         <div className="flex gap-1 flex-shrink-0 ml-2">
-                                          {isOverdue(project.deadline) && (
+                                          {isOverdue(project.dueDate) && (
                                             <AlertTriangle className="h-4 w-4 text-red-600" />
                                           )}
-                                          {isDeadlineNear(project.deadline) && !isOverdue(project.deadline) && (
+                                          {isDeadlineNear(project.dueDate) && !isOverdue(project.dueDate) && (
                                             <Clock className="h-4 w-4 text-orange-600" />
                                           )}
                                         </div>
@@ -760,7 +574,7 @@ const ImprovedKanban = () => {
                                       {/* Cliente */}
                                       <div className="flex items-center gap-2">
                                         <User className="h-3 w-3 text-gray-500" />
-                                        <span className="text-xs text-gray-600">{project.clientName}</span>
+                                        <span className="text-xs text-gray-600">{project.client}</span>
                                       </div>
 
                                       {/* Badges */}
@@ -768,39 +582,29 @@ const ImprovedKanban = () => {
                                         <Badge className={`text-xs ${getPriorityColor(project.priority)}`}>
                                           {project.priority}
                                         </Badge>
-                                        <Badge className={`text-xs ${getProjectTypeColor(project.projectType)}`}>
-                                          {project.projectType}
-                                        </Badge>
                                       </div>
 
                                       {/* Data limite */}
-                                      {project.deadline && (
+                                      {project.dueDate && (
                                         <div className="flex items-center gap-2">
                                           <Calendar className="h-3 w-3 text-gray-500" />
                                           <span className={`text-xs ${
-                                            isOverdue(project.deadline) ? 'text-red-600 font-medium' :
-                                            isDeadlineNear(project.deadline) ? 'text-orange-600 font-medium' : 
+                                            isOverdue(project.dueDate) ? 'text-red-600 font-medium' :
+                                            isDeadlineNear(project.dueDate) ? 'text-orange-600 font-medium' : 
                                             'text-gray-600'
                                           }`}>
-                                            {new Date(project.deadline).toLocaleDateString('pt-BR')}
+                                            {new Date(project.dueDate).toLocaleDateString('pt-BR')}
                                           </span>
                                         </div>
                                       )}
 
-                                      {/* Links de entrega */}
-                                      {project.deliveryLinks.length > 0 && (
+                                      {/* Links */}
+                                      {project.links && project.links.length > 0 && (
                                         <div className="flex items-center gap-2">
-                                          <Link className="h-3 w-3 text-green-600" />
+                                          <ExternalLink className="h-3 w-3 text-green-600" />
                                           <span className="text-xs text-green-600">
-                                            {project.deliveryLinks.length} link(s)
+                                            {project.links.length} link(s)
                                           </span>
-                                        </div>
-                                      )}
-
-                                      {/* Responsável */}
-                                      {project.assignedTo && (
-                                        <div className="text-xs text-gray-500 border-t pt-2">
-                                          Editor: {project.assignedTo}
                                         </div>
                                       )}
                                     </div>
@@ -850,13 +654,7 @@ const ImprovedKanban = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700">Cliente</label>
-                  <p className="text-sm text-gray-900">{selectedProject.clientName}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Tipo de Projeto</label>
-                  <Badge className={`${getProjectTypeColor(selectedProject.projectType)} ml-2`}>
-                    {selectedProject.projectType}
-                  </Badge>
+                  <p className="text-sm text-gray-900">{selectedProject.client}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Prioridade</label>
@@ -867,20 +665,16 @@ const ImprovedKanban = () => {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Prazo</label>
                   <p className={`text-sm ${
-                    selectedProject.deadline && isOverdue(selectedProject.deadline) ? 'text-red-600 font-medium' :
-                    selectedProject.deadline && isDeadlineNear(selectedProject.deadline) ? 'text-orange-600 font-medium' : 
+                    selectedProject.dueDate && isOverdue(selectedProject.dueDate) ? 'text-red-600 font-medium' :
+                    selectedProject.dueDate && isDeadlineNear(selectedProject.dueDate) ? 'text-orange-600 font-medium' : 
                     'text-gray-900'
                   }`}>
-                    {selectedProject.deadline ? new Date(selectedProject.deadline).toLocaleDateString('pt-BR') : 'Não definido'}
+                    {selectedProject.dueDate ? new Date(selectedProject.dueDate).toLocaleDateString('pt-BR') : 'Não definido'}
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Duração Estimada</label>
-                  <p className="text-sm text-gray-900">{selectedProject.estimatedDuration || 'Não informado'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Responsável</label>
-                  <p className="text-sm text-gray-900">{selectedProject.assignedTo}</p>
+                  <label className="text-sm font-medium text-gray-700">Status</label>
+                  <p className="text-sm text-gray-900">{board[selectedProject.status]?.title}</p>
                 </div>
               </div>
 
@@ -892,104 +686,23 @@ const ImprovedKanban = () => {
                 </div>
               )}
 
-              {/* Observações */}
-              {selectedProject.notes && (
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Observações</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedProject.notes}</p>
-                </div>
-              )}
-
-              {/* Links de entrega */}
+              {/* Links */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-gray-700">Links de Entrega</label>
-                  {permissions.canUploadFiles && (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button size="sm" variant="outline">
-                          <Upload className="h-4 w-4 mr-2" />
-                          Adicionar Link
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Adicionar Link de Entrega</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <Input
-                            placeholder="URL do arquivo (WeTransfer, Google Drive, etc.)"
-                            value={newDeliveryLink.url}
-                            onChange={(e) => setNewDeliveryLink({...newDeliveryLink, url: e.target.value})}
-                          />
-                          <div className="grid grid-cols-2 gap-4">
-                            <Select
-                              value={newDeliveryLink.platform}
-                              onValueChange={(value) => setNewDeliveryLink({...newDeliveryLink, platform: value as any})}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="WeTransfer">WeTransfer</SelectItem>
-                                <SelectItem value="Google Drive">Google Drive</SelectItem>
-                                <SelectItem value="Dropbox">Dropbox</SelectItem>
-                                <SelectItem value="YouTube">YouTube</SelectItem>
-                                <SelectItem value="Vimeo">Vimeo</SelectItem>
-                                <SelectItem value="Outro">Outro</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id="isPublic"
-                                checked={newDeliveryLink.isPublic}
-                                onChange={(e) => setNewDeliveryLink({...newDeliveryLink, isPublic: e.target.checked})}
-                              />
-                              <label htmlFor="isPublic" className="text-sm">Visível para o cliente</label>
-                            </div>
-                          </div>
-                          <Input
-                            placeholder="Descrição (opcional)"
-                            value={newDeliveryLink.description}
-                            onChange={(e) => setNewDeliveryLink({...newDeliveryLink, description: e.target.value})}
-                          />
-                          <Button onClick={handleAddDeliveryLink} className="w-full">
-                            Adicionar Link
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  {selectedProject.deliveryLinks.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">Nenhum link de entrega adicionado</p>
-                  ) : (
-                    selectedProject.deliveryLinks.map((link) => (
-                      <div key={link.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{link.platform}</Badge>
-                            {link.isPublic && (
-                              <Badge variant="secondary" className="bg-green-100 text-green-800">Cliente</Badge>
-                            )}
-                          </div>
-                          {link.description && (
-                            <p className="text-sm text-gray-600 mt-1">{link.description}</p>
-                          )}
-                          <p className="text-xs text-gray-500">
-                            Adicionado em {new Date(link.uploadedAt).toLocaleDateString('pt-BR')}
-                          </p>
-                        </div>
+                <label className="text-sm font-medium text-gray-700">Links de Entrega</label>
+                <div className="space-y-2 mt-2">
+                  {selectedProject.links && selectedProject.links.length > 0 ? (
+                    selectedProject.links.map((link, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm text-gray-600">{link}</span>
                         <Button size="sm" variant="outline" asChild>
-                          <a href={link.url} target="_blank" rel="noopener noreferrer">
+                          <a href={link} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         </Button>
                       </div>
                     ))
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">Nenhum link adicionado</p>
                   )}
                 </div>
               </div>
