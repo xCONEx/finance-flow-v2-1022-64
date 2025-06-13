@@ -9,7 +9,7 @@ export interface KanbanBoardProps {
   onProjectMove: (projectId: string, newStatus: Project['status']) => void;
 }
 
-const KanbanBoard = ({ projects, onProjectMove }: KanbanBoardProps) => {
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ projects, onProjectMove }) => {
   const columns = [
     { id: 'filmado', title: 'Filmado', color: 'bg-blue-100' },
     { id: 'edicao', title: 'Em Edição', color: 'bg-yellow-100' },
