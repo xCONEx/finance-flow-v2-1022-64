@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,10 +7,9 @@ import { TeamMember } from '../../types/project';
 
 interface CompanyDashboardProps {
   agencyId?: string;
-  companyName?: string;
 }
 
-const CompanyDashboard = ({ agencyId, companyName }: CompanyDashboardProps) => {
+const CompanyDashboard = ({ agencyId }: CompanyDashboardProps) => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +42,7 @@ const CompanyDashboard = ({ agencyId, companyName }: CompanyDashboardProps) => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">
-          Dashboard da Empresa {companyName && `- ${companyName}`}
+          Dashboard da Empresa
         </h1>
         <Button>
           <Plus className="w-4 h-4 mr-2" />
