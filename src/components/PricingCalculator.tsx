@@ -11,19 +11,19 @@ import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 const PricingCalculator = () => {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [workHours, setWorkHours] = useState(8);
   const [workDays, setWorkDays] = useState(20);
   const [desiredSalary, setDesiredSalary] = useState(5000);
   const [dailyValue, setDailyValue] = useState(0);
 
   useEffect(() => {
-    if (user?.routine) {
-      setWorkHours(user.routine.dailyHours || 8);
-      setWorkDays(user.routine.workDays || 20);
-      setDesiredSalary(user.routine.desiredSalary || 5000);
+    if (userData?.routine) {
+      setWorkHours(userData.routine.dailyHours || 8);
+      setWorkDays(userData.routine.workDays || 20);
+      setDesiredSalary(userData.routine.desiredSalary || 5000);
     }
-  }, [user]);
+  }, [userData]);
 
   useEffect(() => {
     // Calcula o valor diário com base no salário desejado e dias de trabalho
