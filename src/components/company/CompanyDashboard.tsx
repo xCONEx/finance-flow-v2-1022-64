@@ -7,16 +7,23 @@ import { teamService } from '../../services/teamService';
 import { TeamMember } from '../../types/project';
 import { useAuth } from '../../contexts/AuthContext';
 
-const CompanyDashboard = () => {
+interface CompanyDashboardProps {
+  agencyId?: string;
+  companyName?: string;
+}
+
+const CompanyDashboard = ({ agencyId, companyName }: CompanyDashboardProps) => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const { agencyData } = useAuth();
 
+  const currentAgencyId = agencyId || agencyData?.id;
+
   useEffect(() => {
     const loadTeamMembers = async () => {
-      if (agencyData?.id) {
+      if (currentAgencyId) {
         try {
-          const members = await teamService.getCompanyTeam(agencyData.id);
+          const members = await teamService.getCompanyTeam(currentAgencyId);
           setTeamMembers(members);
         } catch (error) {
           console.error('Erro ao carregar equipe:', error);
@@ -27,7 +34,7 @@ const CompanyDashboard = () => {
     };
 
     loadTeamMembers();
-  }, [agencyData?.id]);
+  }, [currentAgencyId]);
 
   if (loading) {
     return (
@@ -40,7 +47,9 @@ const CompanyDashboard = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard da Empresa</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          Dashboard da Empresa {companyName && `- ${companyName}`}
+        </h1>
         <Button>
           <Plus className="w-4 h-4 mr-2" />
           Adicionar Membro

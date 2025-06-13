@@ -1,28 +1,15 @@
 
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, User, AlertCircle } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { Project } from '../types/project';
 
-interface Project {
-  id: string;
-  title: string;
-  client: string;
-  dueDate: string;
-  priority: "baixa" | "media" | "alta";
-  status: "filmado" | "edicao" | "revisao" | "entregue";
-  assignedTo?: string[];
-}
-
-interface KanbanBoardProps {
+export interface KanbanBoardProps {
   projects: Project[];
-  onProjectMove: (projectId: string, newStatus: string) => void;
-  onProjectClick?: (project: Project) => void;
+  onProjectMove: (projectId: string, newStatus: Project['status']) => void;
 }
 
-const KanbanBoard = ({ projects, onProjectMove, onProjectClick }: KanbanBoardProps) => {
+const KanbanBoard = ({ projects, onProjectMove }: KanbanBoardProps) => {
   const columns = [
     { id: 'filmado', title: 'Filmado', color: 'bg-blue-100' },
     { id: 'edicao', title: 'Em Edição', color: 'bg-yellow-100' },
@@ -30,7 +17,11 @@ const KanbanBoard = ({ projects, onProjectMove, onProjectClick }: KanbanBoardPro
     { id: 'entregue', title: 'Entregue', color: 'bg-green-100' }
   ];
 
-  const getPriorityColor = (priority: string) => {
+  const getProjectsByStatus = (status: string) => {
+    return projects.filter(project => project.status === status);
+  };
+
+  const getPriorityColor = (priority: Project['priority']) => {
     switch (priority) {
       case 'alta': return 'bg-red-500';
       case 'media': return 'bg-yellow-500';
@@ -39,86 +30,58 @@ const KanbanBoard = ({ projects, onProjectMove, onProjectClick }: KanbanBoardPro
     }
   };
 
-  const onDragEnd = (result: any) => {
-    if (!result.destination) return;
-    
-    const projectId = result.draggableId;
-    const newStatus = result.destination.droppableId;
-    
+  const handleDragStart = (e: React.DragEvent, projectId: string) => {
+    e.dataTransfer.setData('text/plain', projectId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, newStatus: Project['status']) => {
+    e.preventDefault();
+    const projectId = e.dataTransfer.getData('text/plain');
     onProjectMove(projectId, newStatus);
   };
 
-  const isOverdue = (dueDate: string) => {
-    return new Date(dueDate) < new Date();
-  };
-
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {columns.map((column) => (
-          <div key={column.id} className={`rounded-lg ${column.color} p-4`}>
-            <h3 className="font-semibold text-gray-800 mb-4">{column.title}</h3>
-            
-            <Droppable droppableId={column.id}>
-              {(provided) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-3 min-h-[200px]"
-                >
-                  {projects
-                    .filter(project => project.status === column.id)
-                    .map((project, index) => (
-                      <Draggable key={project.id} draggableId={project.id} index={index}>
-                        {(provided) => (
-                          <Card
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className="cursor-pointer hover:shadow-md transition-shadow"
-                            onClick={() => onProjectClick?.(project)}
-                          >
-                            <CardHeader className="pb-2">
-                              <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm font-medium truncate">
-                                  {project.title}
-                                </CardTitle>
-                                <Badge 
-                                  className={`${getPriorityColor(project.priority)} text-white text-xs`}
-                                >
-                                  {project.priority}
-                                </Badge>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="pt-0">
-                              <div className="space-y-2">
-                                <div className="flex items-center text-xs text-gray-600">
-                                  <User className="w-3 h-3 mr-1" />
-                                  {project.client}
-                                </div>
-                                <div className={`flex items-center text-xs ${
-                                  isOverdue(project.dueDate) ? 'text-red-600' : 'text-gray-600'
-                                }`}>
-                                  <Calendar className="w-3 h-3 mr-1" />
-                                  {format(new Date(project.dueDate), 'dd/MM/yyyy', { locale: ptBR })}
-                                  {isOverdue(project.dueDate) && (
-                                    <AlertCircle className="w-3 h-3 ml-1" />
-                                  )}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )}
-                      </Draggable>
-                    ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {columns.map((column) => (
+        <div
+          key={column.id}
+          className={`${column.color} rounded-lg p-4 min-h-[500px]`}
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, column.id as Project['status'])}
+        >
+          <h3 className="font-semibold mb-4 text-center">{column.title}</h3>
+          <div className="space-y-3">
+            {getProjectsByStatus(column.id).map((project) => (
+              <Card
+                key={project.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, project.id)}
+                className="cursor-move hover:shadow-md transition-shadow"
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">{project.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-gray-600 mb-2">{project.client}</p>
+                  <div className="flex items-center justify-between">
+                    <Badge className={`${getPriorityColor(project.priority)} text-white text-xs`}>
+                      {project.priority}
+                    </Badge>
+                    <span className="text-xs text-gray-500">
+                      {new Date(project.dueDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        ))}
-      </div>
-    </DragDropContext>
+        </div>
+      ))}
+    </div>
   );
 };
 

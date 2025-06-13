@@ -39,11 +39,11 @@ export const projectService = {
   },
 
   // Buscar projetos da empresa
-  async getCompanyProjects(companyId: string) {
+  async getCompanyProjects(agencyId: string) {
     try {
       const q = query(
         collection(db, COLLECTION_NAME),
-        where('agencyId', '==', companyId),
+        where('agencyId', '==', agencyId),
         orderBy('createdAt', 'desc')
       );
       const querySnapshot = await getDocs(q);
@@ -84,10 +84,10 @@ export const projectService = {
   },
 
   // Escutar mudanças em tempo real
-  subscribeToCompanyProjects(companyId: string, callback: (projects: Project[]) => void) {
+  subscribeToCompanyProjects(agencyId: string, callback: (projects: Project[]) => void) {
     const q = query(
       collection(db, COLLECTION_NAME),
-      where('agencyId', '==', companyId),
+      where('agencyId', '==', agencyId),
       orderBy('createdAt', 'desc')
     );
     

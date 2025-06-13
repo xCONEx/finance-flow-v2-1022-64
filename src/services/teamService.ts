@@ -32,11 +32,11 @@ export const teamService = {
   },
 
   // Buscar membros da empresa
-  async getCompanyTeam(companyId: string) {
+  async getCompanyTeam(agencyId: string) {
     try {
       const q = query(
         collection(db, COLLECTION_NAME),
-        where('agencyId', '==', companyId),
+        where('agencyId', '==', agencyId),
         orderBy('createdAt', 'desc')
       );
       const querySnapshot = await getDocs(q);
