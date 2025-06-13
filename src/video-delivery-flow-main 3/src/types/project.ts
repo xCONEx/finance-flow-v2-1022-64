@@ -10,7 +10,7 @@ export interface Project {
   status: "filmado" | "edicao" | "revisao" | "entregue";
   createdAt: string;
   updatedAt: string;
-  agencyId: string;
+  companyId: string;
   assignedTo?: string[];
 }
 
@@ -20,6 +20,6 @@ export interface TeamMember {
   email: string;
   role: "admin" | "editor" | "viewer";
   avatar?: string;
-  agencyId: string;
+  companyId: string;
   createdAt: string;
 }

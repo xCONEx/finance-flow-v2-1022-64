@@ -21,6 +21,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   loading: boolean;
   userData: FirestoreUser | null;
+  agencyData: any | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,12 +38,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<FirestoreUser | null>(null);
+  const [agencyData, setAgencyData] = useState<any | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
           console.log('🔄 Usuário autenticado, carregando dados...', firebaseUser.uid);
+          console.log('📧 Email do Firebase:', firebaseUser.email);
           
           await forceTokenRefresh();
           
@@ -86,14 +89,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Verificar se é admin
           const isAdmin = firebaseUser.email === 'adm.financeflow@gmail.com' || firebaseUser.email === 'yuriadrskt@gmail.com';
-          let userType: 'individual' | 'enterprise' | 'admin' = 'individual';
+          let userType: 'individual' | 'company_owner' | 'employee' | 'admin' = 'individual';
           
           if (isAdmin) {
             userType = 'admin';
             console.log('👑 Usuário administrador identificado:', firebaseUser.email);
-          } else if (userData.companyId) {
-            userType = 'enterprise';
-            console.log('🏢 Usuário Enterprise identificado:', userData.companyId);
+            
+            // Atualizar role no banco se necessário
+            if (userData.role !== 'admin') {
+              await firestoreService.updateUserField(firebaseUser.uid, 'role', 'admin');
+              userData.role = 'admin';
+            }
+          }
+
+          // Buscar dados da agência usando novo método
+          console.log('🏢 Verificando agência do usuário...');
+          let userAgency = null;
+          
+          try {
+            userAgency = await firestoreService.getUserAgencyData(firebaseUser.uid);
+            
+            if (userAgency) {
+              console.log('🏢 Agência encontrada:', userAgency.id);
+              console.log('👤 Role na agência:', userAgency.userRole);
+              
+              // Definir userType baseado no role
+              if (userAgency.userRole === 'admin') {
+                userType = 'admin';
+              } else if (userAgency.userRole === 'owner') {
+                userType = 'company_owner';
+              } else if (userAgency.userRole === 'editor' || userAgency.userRole === 'viewer') {
+                userType = 'employee';
+              }
+              
+              setAgencyData(userAgency);
+            } else if (!isAdmin) {
+              console.log('👤 Usuário individual (não pertence a agência)');
+              setAgencyData(null);
+            } else {
+              setAgencyData(null);
+            }
+            
+          } catch (error) {
+            console.error('❌ Erro ao buscar agência:', error);
+            setAgencyData(null);
           }
           
           // Converter para o formato do contexto
@@ -103,16 +142,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: firebaseUser.displayName || userData.name || userData.email.split('@')[0],
             userType: userType,
             createdAt: new Date().toISOString(),
-            photoURL: firebaseUser.photoURL || undefined,
-            companyId: userData.companyId,
-            companyName: userData.companyName
+            photoURL: firebaseUser.photoURL || undefined
           };
 
           setUser(appUser);
           setUserData(userData);
 
           console.log('✅ Dados do usuário carregados com sucesso!');
-          console.log('👤 Tipo de usuário:', userType);
+          console.log('👤 Tipo de usuário FINAL:', userType);
+          console.log('📧 Email salvo no contexto:', userData.email);
+          if (isAdmin) {
+            console.log('👑 Usuário administrador confirmado com acesso total');
+          }
 
         } catch (error) {
           console.error('❌ Erro ao carregar dados do usuário:', error);
@@ -121,6 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('👋 Usuário não autenticado');
         setUser(null);
         setUserData(null);
+        setAgencyData(null);
       }
       setLoading(false);
     });
@@ -169,7 +211,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dalilyValue: 0,
           desiredSalary: 0,
           workDays: 22
-        }
+        },
+        role: 'individual'
       };
 
       await firestoreService.createUser(newUserData);
@@ -199,7 +242,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logout,
       register,
       loading,
-      userData
+      userData,
+      agencyData
     }}>
       {children}
     </AuthContext.Provider>

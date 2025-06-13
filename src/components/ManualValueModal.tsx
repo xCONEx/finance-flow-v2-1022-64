@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { DollarSign, Save } from 'lucide-react';
 import {
@@ -97,7 +98,7 @@ const ManualValueModal = ({ open, onOpenChange }: ManualValueModalProps) => {
       const existingJobs = (currentData && 'jobs' in currentData && currentData.jobs) ? currentData.jobs : [];
       const updatedJobs = [...existingJobs, newJob];
       
-      await firestoreService.saveUserData(user.id, { jobs: updatedJobs });
+      await firestoreService.updateField('usuarios', user.id, 'jobs', updatedJobs);
 
       toast({
         title: "Job Manual Salvo!",

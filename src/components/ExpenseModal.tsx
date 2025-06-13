@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Save } from 'lucide-react';
 import {
@@ -13,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { useAppContext } from '../contexts/AppContext';
 import { toast } from '@/hooks/use-toast';
-import { useAuth } from '../contexts/AuthContext';
 
 const EXPENSE_CATEGORIES = [
   'Moradia',
@@ -32,7 +32,6 @@ interface ExpenseModalProps {
 
 const ExpenseModal = ({ open, onOpenChange, editingCost }: ExpenseModalProps) => {
   const { addMonthlyCost, updateMonthlyCost } = useAppContext();
-  const { user } = useAuth();
   const [formData, setFormData] = useState({
     description: '',
     category: '',
@@ -71,15 +70,6 @@ const ExpenseModal = ({ open, onOpenChange, editingCost }: ExpenseModalProps) =>
       return;
     }
 
-    if (!user) {
-      toast({
-        title: "Erro",
-        description: "Usuário não encontrado.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
       if (editingCost) {
         await updateMonthlyCost(editingCost.id, formData);
@@ -88,10 +78,7 @@ const ExpenseModal = ({ open, onOpenChange, editingCost }: ExpenseModalProps) =>
           description: "A despesa foi atualizada com sucesso.",
         });
       } else {
-        await addMonthlyCost({
-          ...formData,
-          userId: user.id
-        });
+        await addMonthlyCost(formData);
         toast({
           title: "Despesa Adicionada",
           description: "A despesa foi adicionada com sucesso.",

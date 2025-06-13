@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Save, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import { firestoreService } from '../services/firestore';
 
 const UserProfile = () => {
-  const { user, logout, userData } = useAuth();
+  const { user, logout, userData, agencyData } = useAuth();
   const { currentTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -24,7 +25,7 @@ const UserProfile = () => {
     company: ''
   });
 
-  // Load data when userData changes
+  // Carregar dados quando userData mudar
   useEffect(() => {
     if (user && userData) {
       setFormData({
@@ -36,12 +37,14 @@ const UserProfile = () => {
     }
   }, [user, userData]);
 
-  // Get profile image with proper fallbacks
+  // Buscar foto do Google se disponível
   const getProfileImageUrl = () => {
+    // Prioridade: 1. Foto customizada 2. Foto do Google 3. Avatar padrão
     if (userData?.imageuser) {
       return userData.imageuser;
     }
     
+    // Verificar se o usuário tem photoURL do Google
     if (user?.photoURL) {
       return user.photoURL;
     }
@@ -54,6 +57,7 @@ const UserProfile = () => {
     
     setIsLoading(true);
     try {
+      // Salvar dados no Firebase
       const updateData: any = {};
       
       if (formData.phone !== (userData?.personalInfo?.phone || userData?.phone)) {
@@ -114,11 +118,13 @@ const UserProfile = () => {
 
     setIsLoading(true);
     try {
+      // Converter para base64
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = e.target?.result as string;
         
         try {
+          // Salvar no Firebase como imageuser
           await firestoreService.updateUserField(user.id, 'imageuser', base64);
           
           toast({
@@ -170,9 +176,9 @@ const UserProfile = () => {
     setIsEditing(!isEditing);
   };
 
-  // Determine if user is in a company
-  const isInCompany = user?.userType === 'enterprise' && !!user.companyId;
-  const companyName = userData?.companyName || 'Empresa não encontrada';
+  // Determinar se o usuário está em uma empresa
+  const isInCompany = user?.userType === 'company_owner' || user?.userType === 'employee';
+  const companyName = agencyData?.name || 'Empresa não encontrada';
 
   return (
     <div className="space-y-6 pb-20 md:pb-6">
@@ -298,7 +304,8 @@ const UserProfile = () => {
                 <Label>Tipo de Usuário</Label>
                 <p className="text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded">
                   {user?.userType === 'admin' && 'Administrador do Sistema'}
-                  {user?.userType === 'enterprise' && 'Usuário Enterprise'}
+                  {user?.userType === 'company_owner' && 'Dono da Empresa'}
+                  {user?.userType === 'employee' && 'Colaborador'}
                   {user?.userType === 'individual' && 'Usuário Individual'}
                 </p>
               </div>
