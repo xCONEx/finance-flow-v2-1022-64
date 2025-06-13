@@ -84,11 +84,14 @@ const Dashboard = () => {
   ];
 
   const handleQuickAddCost = () => {
+    if (!user) return;
+    
     addMonthlyCost({
       description: 'Novo Custo',
       category: 'Geral',
       value: 0,
-      month: new Date().toISOString().slice(0, 7)
+      month: new Date().toISOString().slice(0, 7),
+      userId: user.id
     });
   };
 

@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -32,6 +33,9 @@ export interface FirestoreUser {
     desiredSalary: number;
     workDays: number;
   };
+  userType?: 'admin' | 'enterprise' | 'individual';
+  subscription?: 'free' | 'premium' | 'enterprise';
+  banned?: boolean;
 }
 
 export const firestoreService = {
@@ -69,6 +73,87 @@ export const firestoreService = {
     } catch (error) {
       console.error("Error saving user data:", error);
       throw error;
+    }
+  },
+
+  updateUserField: async (uid: string, field: string, value: any): Promise<void> => {
+    try {
+      const userDocRef = doc(db, 'usuarios', uid);
+      await updateDoc(userDocRef, { [field]: value });
+    } catch (error) {
+      console.error("Error updating user field:", error);
+      throw error;
+    }
+  },
+
+  updateField: async (collection: string, docId: string, field: string, value: any): Promise<void> => {
+    try {
+      const docRef = doc(db, collection, docId);
+      await updateDoc(docRef, { [field]: value });
+    } catch (error) {
+      console.error("Error updating field:", error);
+      throw error;
+    }
+  },
+
+  getAllUsers: async (): Promise<any[]> => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'usuarios'));
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      throw error;
+    }
+  },
+
+  getAnalyticsData: async (): Promise<any> => {
+    try {
+      // Simple analytics based on users and basic metrics
+      const users = await this.getAllUsers();
+      const totalUsers = users.length;
+      const adminUsers = users.filter(u => u.userType === 'admin').length;
+      const enterpriseUsers = users.filter(u => u.userType === 'enterprise').length;
+      const individualUsers = users.filter(u => u.userType === 'individual').length;
+
+      return {
+        overview: {
+          totalUsers,
+          totalAgencias: 0, // No agencies in simplified system
+          totalRevenue: 0,
+          activeUsers: totalUsers
+        },
+        userStats: {
+          userTypes: {
+            admin: adminUsers,
+            individual: individualUsers,
+            company_owner: enterpriseUsers,
+            employee: 0
+          },
+          conversionRate: 0
+        },
+        businessStats: {
+          totalJobs: 0,
+          approvedJobs: 0,
+          pendingJobs: 0,
+          averageJobValue: 0,
+          jobApprovalRate: 0
+        },
+        recentActivity: {
+          newUsersThisMonth: 0,
+          newCompaniesThisMonth: 0,
+          newJobsThisMonth: 0
+        },
+        productivity: {
+          taskCompletionRate: 0,
+          averageTasksPerUser: 0
+        }
+      };
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+      return null;
     }
   },
 
@@ -211,7 +296,7 @@ export const firestoreService = {
   updateUserTask: async (task: Task): Promise<void> => {
     try {
       const taskDocRef = doc(db, 'tasks', task.id);
-      await updateDoc(taskDocRef, task as any); // Ajuste o tipo conforme necessário
+      await updateDoc(taskDocRef, task as any);
     } catch (error) {
       console.error("Error updating task:", error);
       throw error;
