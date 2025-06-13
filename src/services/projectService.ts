@@ -9,9 +9,10 @@ import {
   query,
   where,
   orderBy,
+  onSnapshot,
   Timestamp 
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../services/firebase';
 import { Project } from '../types/project';
 
 const COLLECTION_NAME = 'projects';
@@ -30,6 +31,11 @@ export const projectService = {
       console.error('Erro ao adicionar projeto:', error);
       throw error;
     }
+  },
+
+  // Alias para createProject
+  async createProject(projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) {
+    return this.addProject(projectData);
   },
 
   // Buscar projetos da empresa
@@ -75,5 +81,24 @@ export const projectService = {
       console.error('Erro ao remover projeto:', error);
       throw error;
     }
+  },
+
+  // Escutar mudanças em tempo real
+  subscribeToCompanyProjects(companyId: string, callback: (projects: Project[]) => void) {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('agencyId', '==', companyId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const projects = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate()?.toISOString() || '',
+        updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || ''
+      })) as Project[];
+      callback(projects);
+    });
   }
 };

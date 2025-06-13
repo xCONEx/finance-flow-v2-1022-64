@@ -11,7 +11,7 @@ import {
   orderBy,
   Timestamp 
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../services/firebase';
 import { TeamMember } from '../types/project';
 
 const COLLECTION_NAME = 'team_members';
