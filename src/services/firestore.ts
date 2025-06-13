@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -34,7 +33,7 @@ export interface FirestoreUser {
   equipments: any[];
   expenses: any[];
   jobs: any[];
-  routine: {
+  routine?: {
     dailyHours: number;
     dalilyValue: number;
     desiredSalary: number;
@@ -110,9 +109,9 @@ export const firestoreService = {
     try {
       const users = await this.getAllUsers();
       const totalUsers = users?.length || 0;
-      const adminUsers = users?.filter(u => u.userType === 'admin')?.length || 0;
-      const enterpriseUsers = users?.filter(u => u.userType === 'enterprise')?.length || 0;
-      const individualUsers = users?.filter(u => u.userType === 'individual')?.length || 0;
+      const adminUsers = users?.filter(u => u?.userType === 'admin')?.length || 0;
+      const enterpriseUsers = users?.filter(u => u?.userType === 'enterprise')?.length || 0;
+      const individualUsers = users?.filter(u => u?.userType === 'individual')?.length || 0;
 
       return {
         overview: {

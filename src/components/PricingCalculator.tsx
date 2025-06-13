@@ -1,43 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Check, ChevronsUpDown, Coins } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
+import { Coins } from 'lucide-react';
 import { firestoreService } from '../services/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-
-type Framework = {
-  value: string
-  label: string
-}
-
-const frameworks: Framework[] = [
-  {
-    value: "lucide",
-    label: "Lucide",
-  },
-  {
-    value: "tailwind",
-    label: "Tailwind",
-  },
-  {
-    value: "radix",
-    label: "Radix",
-  },
-  {
-    value: "shadcn",
-    label: "shadcn/ui",
-  },
-  {
-    value: "nextui",
-    label: "NextUI",
-  },
-]
 
 const PricingCalculator = () => {
   const { user } = useAuth();
